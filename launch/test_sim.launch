@@ -44,7 +44,7 @@
   
 
   <!-- If needed, broadcast static tf for robot root -->
-  <node pkg="tf2_ros" type="static_transform_publisher" name="virtual_joint_broadcaster_1" args="0 0 0 0 0 0 world panda_link0" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="virtual_joint_broadcaster_1" args="0.98 0.058 0.31 -2.24 -.3 2.66 2.32 panda_link0" />
 
 
 
