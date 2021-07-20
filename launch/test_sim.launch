@@ -13,6 +13,12 @@
     <arg name="load_gripper" value="true" />
   </include>
   -->
+  <node name="vicon_franka_integration_node" pkg="vicon_franka_integration" type="vicon_franka_integration_node" respawn="false" output="screen">
+    <rosparam command="load" file="$(find panda_moveit_config)/config/kinematics.yaml"/>
+    <param name="/planning_plugin" value="ompl_interface/OMPLPlanner"/>
+    <rosparam command="load" file="$(find panda_moveit_config)/config/ompl_planning.yaml"/>
+  </node>
+
 
 	
   <!-- By default, we do not start a database (it can be large) -->
@@ -43,9 +49,9 @@
   </include>
   
 
-  <!-- If needed, broadcast static tf for robot root -->
+  <!-- If needed, broadcast static tf for robot root 
   <node pkg="tf2_ros" type="static_transform_publisher" name="virtual_joint_broadcaster_1" args="0.98 0.058 0.31 -2.24 -.3 2.66 2.32 panda_link0" />
-
+  -->
 
 
   
@@ -71,13 +77,7 @@
   </include>
   
 
-  <node name="vicon_franka_integration_node" pkg="vicon_franka_integration" type="vicon_franka_integration_node" respawn="false" output="screen">
-    <rosparam command="load" file="$(find panda_moveit_config)/config/kinematics.yaml"/>
-    <param name="/planning_plugin" value="ompl_interface/OMPLPlanner"/>
-    <rosparam command="load" file="$(find panda_moveit_config)/config/ompl_planning.yaml"/>
-  </node>
-
-
+  
   <!-- Run Rviz -->
   <include file="$(find panda_moveit_config)/launch/moveit_rviz.launch">
     <arg name="rviz_tutorial" value="$(arg rviz_tutorial)"/>

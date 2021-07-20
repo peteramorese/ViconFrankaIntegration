@@ -155,7 +155,7 @@ void updateObject(std::vector<std::string>& IDs, std::vector<moveit_msgs::Collis
 	colObjVec[0].primitive_poses[0].orientation.w = qw; 
 	//colObjVec[0].operation = colObjVec[0].ADD;
 	planning_scene_interface.applyCollisionObjects(colObjVec);
-	planning_scene_interface.addCollisionObjects(colObjVec);
+	//planning_scene_interface.addCollisionObjects(colObjVec);
 
 }
 
@@ -352,7 +352,7 @@ int main(int argc, char **argv) {
 	colObjVec[1].primitive_poses[0].orientation.w = 1;
 	colObjVec[1].primitive_poses[0].position.x = 0;
 	colObjVec[1].primitive_poses[0].position.y = 0;
-	colObjVec[1].primitive_poses[0].position.z = -.05/2 - .10;
+	colObjVec[1].primitive_poses[0].position.z = -.05/2 - .01;
 	colObjVec[1].operation = colObjVec[1].ADD;
 
 
@@ -364,6 +364,7 @@ int main(int argc, char **argv) {
 		auto p = configData.returnConfigPtr(); //geometry_msgs::PoseStamped*
 
 
+		// Coordinate frame transformation
 		readx = -p->pose.position.y + .794;
 		ready = p->pose.position.x + .076;
 		readz = p->pose.position.z;
@@ -409,11 +410,11 @@ int main(int argc, char **argv) {
 			q_orig[1] = 0;
 			q_orig[2] = box_h/2 + .2;
 			q_orig[3] = 0;
-			q_hand_yaw.setRPY(0, 0, M_PI/4);
+			q_hand_yaw.setRPY(0, 0, 0);
 			q_orig = q_hand_yaw * q_orig;
 
 			q_in = q_r;
-			q_180.setRPY(0, M_PI, 0);
+			q_180.setRPY(0, M_PI, -M_PI/4);
 			q_f = q_in * q_orig * q_in.inverse();
 			q_rot = q_in * q_180;
 		}
