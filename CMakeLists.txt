@@ -20,8 +20,11 @@ find_package(catkin REQUIRED COMPONENTS
 	tf2_ros
 	tf2_eigen
 	tf2_geometry_msgs
+	genmsg
+	actionlib_msgs
 	)
 
+find_package(Franka REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED system filesystem date_time thread)
 
@@ -55,6 +58,7 @@ add_executable(${PROJECT_NAME}_node src/vicon_franka_integration_node.cpp)
 add_executable(vicon_pick_place_node src/vicon_pick_place_node.cpp)
 target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES})
 target_link_libraries(vicon_pick_place_node ${catkin_LIBRARIES})
+#target_link_libraries(vicon_pick_place_node PUBLIC Franka::Franka Eigen3::Eigen3)
 install(TARGETS ${PROJECT_NAME}_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS vicon_pick_place_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 

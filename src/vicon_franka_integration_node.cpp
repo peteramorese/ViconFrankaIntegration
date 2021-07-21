@@ -21,6 +21,9 @@
 #include <moveit_msgs/CollisionObject.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 
+#include "franka_gripper/GraspAction.h"
+#include "franka_gripper/GraspActionGoal.h"
+
 class RetrieveStatus{
 	private:
 		class callbackstatus {
@@ -249,7 +252,6 @@ void place(moveit::planning_interface::MoveGroupInterface& move_group, geometry_
 
 
 
-
 int main(int argc, char **argv) {
 	ros::init(argc, argv, "vicon_franka_integration_node");
 	ros::NodeHandle node_handle("~");
@@ -276,6 +278,12 @@ int main(int argc, char **argv) {
 	visual_tools.deleteAllMarkers();
 	visual_tools.trigger();
 
+
+	/////////////////////////////////////////////////////////////////////////
+	//Gripper grip("172.25.20.101");
+	//grip_client
+	actionlib::SimpleActionClient<franka_gripper::GraspAction> grip_client("/franka_gripper/grasp", true);
+	franka_gripper::GraspActionGoal grip_goal;
 
 
 	//LOADING A PLANNER
@@ -329,57 +337,97 @@ int main(int argc, char **argv) {
 	
 
 	// smallBox1 (specialized tube box)
-	float box_h = .06;
+	float box_h = .154;//.03;
 	colObjVec[0].id = "smallBox1";
 	colObjIDs.push_back(colObjVec[0].id);
 	colObjVec[0].primitives.resize(1);
 	colObjVec[0].primitives[0].type = colObjVec[0].primitives[0].BOX;
 	colObjVec[0].primitives[0].dimensions.resize(3);
-	colObjVec[0].primitives[0].dimensions[1] = .08;
-	colObjVec[0].primitives[0].dimensions[0] = .12;
+	colObjVec[0].primitives[0].dimensions[1] = .045;//.07;
+	colObjVec[0].primitives[0].dimensions[0] = .045;//.10;
 	colObjVec[0].primitives[0].dimensions[2] = box_h;
 
 	// smallBox1 (table)
+	float x_bound, y_bound;
+	x_bound = .1;
+	y_bound = .1;
 	colObjVec[1].id = "table1";
 	colObjIDs.push_back(colObjVec[1].id);
-	colObjVec[1].primitives.resize(1);
+	colObjVec[1].primitives.resize(4);
 	colObjVec[1].primitives[0].type = colObjVec[1].primitives[0].BOX;
 	colObjVec[1].primitives[0].dimensions.resize(3);
-	colObjVec[1].primitives[0].dimensions[0] = 2;
+	colObjVec[1].primitives[0].dimensions[0] = 1;
 	colObjVec[1].primitives[0].dimensions[1] = 2;
 	colObjVec[1].primitives[0].dimensions[2] = .05;
-	colObjVec[1].primitive_poses.resize(1);
+	colObjVec[1].primitive_poses.resize(4);
 	colObjVec[1].primitive_poses[0].orientation.w = 1;
-	colObjVec[1].primitive_poses[0].position.x = 0;
+	colObjVec[1].primitive_poses[0].position.x = 0.50 + x_bound;
 	colObjVec[1].primitive_poses[0].position.y = 0;
-	colObjVec[1].primitive_poses[0].position.z = -.05/2 - .01;
+	colObjVec[1].primitive_poses[0].position.z = -.05/2;
+	colObjVec[1].primitives[1].type = colObjVec[1].primitives[0].BOX;
+	colObjVec[1].primitives[1].dimensions.resize(3);
+	colObjVec[1].primitives[1].dimensions[0] = 1;
+	colObjVec[1].primitives[1].dimensions[1] = 2;
+	colObjVec[1].primitives[1].dimensions[2] = .05;
+	colObjVec[1].primitive_poses[1].orientation.w = 1;
+	colObjVec[1].primitive_poses[1].position.x = -(.50 + x_bound);
+	colObjVec[1].primitive_poses[1].position.y = 0;
+	colObjVec[1].primitive_poses[1].position.z = -.05/2;
+	colObjVec[1].primitives[2].type = colObjVec[1].primitives[0].BOX;
+	colObjVec[1].primitives[2].dimensions.resize(3);
+	colObjVec[1].primitives[2].dimensions[0] = 2 * x_bound;
+	colObjVec[1].primitives[2].dimensions[1] = 1 - y_bound;
+	colObjVec[1].primitives[2].dimensions[2] = .05;
+	colObjVec[1].primitive_poses[2].orientation.w = 1;
+	colObjVec[1].primitive_poses[2].position.x = 0;
+	colObjVec[1].primitive_poses[2].position.y = (1 - y_bound)/2 + y_bound;
+	colObjVec[1].primitive_poses[2].position.z = -.05/2;
+	colObjVec[1].primitives[3].type = colObjVec[1].primitives[0].BOX;
+	colObjVec[1].primitives[3].dimensions.resize(3);
+	colObjVec[1].primitives[3].dimensions[0] = 2 * x_bound;
+	colObjVec[1].primitives[3].dimensions[1] = 1 - y_bound;
+	colObjVec[1].primitives[3].dimensions[2] = .05;
+	colObjVec[1].primitive_poses[3].orientation.w = 1;
+	colObjVec[1].primitive_poses[3].position.x = 0;
+	colObjVec[1].primitive_poses[3].position.y =  -((1 - y_bound)/2 + y_bound);
+	colObjVec[1].primitive_poses[3].position.z = -.05/2 - .00;
+
 	colObjVec[1].operation = colObjVec[1].ADD;
 
 
 	RetrieveData configData(10);
 	RetrieveStatus executionStatus;
 	float readx, ready, readz, readx_mon, ready_mon, readz_mon;
-	while (ros::ok()){
+	//while (ros::ok()){
 		configData.retrieve();
 		auto p = configData.returnConfigPtr(); //geometry_msgs::PoseStamped*
 
 
 		// Coordinate frame transformation
-		readx = -p->pose.position.y + .794;
-		ready = p->pose.position.x + .076;
-		readz = p->pose.position.z;
-
+		/*
+		readx = -p->pose.position.y + .776;
+		ready = p->pose.position.x + .09;
+		readz = p->pose.position.z - .05;
+		*/
+		readx = p->pose.position.x - .021544;
+		ready = p->pose.position.y + .19416;
+		readz = p->pose.position.z + .033176 - .060;
+		geometry_msgs::PoseStamped ret_pose;
+		ret_pose = move_group.getCurrentPose("panda_link8");
+		std::cout<<"CURRENT LINK 8 POSE X = "<<ret_pose.pose.position.x <<std::endl;
+		std::cout<<"CURRENT LINK 8 POSE Y = "<<ret_pose.pose.position.y <<std::endl;
+		std::cout<<"CURRENT LINK 8 POSE Z = "<<ret_pose.pose.position.z <<std::endl;
 		tf2::Quaternion q_r, q_rot, q_f;
 		{
 			tf2::Quaternion q_orig, q_in, q_90;
 
 			tf2::convert(p->pose.orientation, q_in);
-			q_90.setRPY(0, 0, M_PI/2);
+			//q_90.setRPY(0, 0, 0);
 			/*
 			   q_f = q_in * q_orig * q_in.inverse(); 
 			   q_r = q_in * q_90;
 			   */
-			q_r = q_90 * q_in;
+			q_r = q_in; //q_90 * q_in;
 			q_r.normalize();
 		}
 
@@ -408,7 +456,7 @@ int main(int argc, char **argv) {
 			tf2::Quaternion q_orig, q_in, q_180, q_hand_yaw;
 			q_orig[0] = 0;
 			q_orig[1] = 0;
-			q_orig[2] = box_h/2 + .2;
+			q_orig[2] = box_h/2 + .1;
 			q_orig[3] = 0;
 			q_hand_yaw.setRPY(0, 0, 0);
 			q_orig = q_hand_yaw * q_orig;
@@ -432,10 +480,46 @@ int main(int argc, char **argv) {
 		//initpose.orientation = tf2::toMsg(initorient); 
 		move_group.setStartStateToCurrentState();
 		move_group.setPoseTarget(pose);
-		move_group.setPlanningTime(5.0);
+		move_group.setPlanningTime(8.0);
 		moveit::planning_interface::MoveGroupInterface::Plan initplan;
 		move_group.plan(initplan);
 		move_group.execute(initplan);
+
+		std::cout<<"b4 wait for server"<<std::endl;
+		grip_client.waitForServer();
+		std::cout<<"after wait for server"<<std::endl;
+		grip_goal.goal.width = .045;
+		grip_goal.goal.speed = .1;
+		grip_goal.goal.force = 5;
+		grip_goal.goal.epsilon.inner = .03;
+		grip_goal.goal.epsilon.outer = .03;
+		grip_client.sendGoal(grip_goal.goal);
+		grip_client.waitForResult(ros::Duration(5.0));
+
+		pose.position.x = readx + q_f[0];
+		pose.position.y = ready + q_f[1];
+		pose.position.z = readz + q_f[2] + .3;
+		q_rot.normalize();
+		pose.orientation.x = q_rot[0];
+		pose.orientation.y = q_rot[1];
+		pose.orientation.z = q_rot[2];
+		pose.orientation.w = q_rot[3];
+
+		move_group.setStartStateToCurrentState();
+		move_group.setPoseTarget(pose);
+		move_group.setPlanningTime(5.0);
+		moveit::planning_interface::MoveGroupInterface::Plan upplan;
+		move_group.plan(upplan);
+		move_group.execute(upplan);
+
+		grip_goal.goal.width = .10;
+		grip_goal.goal.speed = .1;
+		grip_goal.goal.force = 5;
+		grip_goal.goal.epsilon.inner = .03;
+		grip_goal.goal.epsilon.outer = .03;
+		grip_client.sendGoal(grip_goal.goal);
+		grip_client.waitForResult(ros::Duration(5.0));
+		//grip.grasp(.07, .1, 20);
 		//while (!(moveit::planning_interface::MoveItErrorCode::SUCCESS == move_group.asyncExecute(initplan))){
 		//bool success = move_group.asyncExecute(initplan) == true;
 		//move_group.asyncExecute(initplan);
@@ -462,6 +546,6 @@ int main(int argc, char **argv) {
 			stopped = executionStatus.finished();
 		}
 		*/
-	}
+	//}
 	return 0;
 	}
