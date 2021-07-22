@@ -22,13 +22,25 @@ find_package(catkin REQUIRED COMPONENTS
 	tf2_geometry_msgs
 	genmsg
 	actionlib_msgs
+	message_generation
 	)
 
 find_package(Franka REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED system filesystem date_time thread)
 
-include_directories(${catkin_INCLUDE_DIRS})
+add_service_files(
+	DIRECTORY srv
+	FILES
+	PlanningQuery_srv.srv
+	Strategy.srv
+	)
+
+generate_messages(
+	DEPENDENCIES
+	geometry_msgs
+	std_msgs
+	)
 
 catkin_package(
 	INCLUDE_DIRS include
@@ -42,6 +54,7 @@ catkin_package(
 		moveit_visual_tools
 		moveit_ros_planning_interface
 		interactive_markers
+		message_runtime
 	DEPENDS
 		EIGEN3
 	#  DEPENDS system_lib
@@ -55,11 +68,15 @@ include_directories(
 	)
 
 add_executable(${PROJECT_NAME}_node src/vicon_franka_integration_node.cpp)
-add_executable(vicon_pick_place_node src/vicon_pick_place_node.cpp)
+add_executable(manipulator_node src/manipulator_node.cpp)
+add_executable(com_node src/com_node.cpp)
 target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES})
-target_link_libraries(vicon_pick_place_node ${catkin_LIBRARIES})
-#target_link_libraries(vicon_pick_place_node PUBLIC Franka::Franka Eigen3::Eigen3)
+target_link_libraries(manipulator_node ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries(com_node ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 install(TARGETS ${PROJECT_NAME}_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
-install(TARGETS vicon_pick_place_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
-
+install(TARGETS manipulator_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(TARGETS com_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(manipulator_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(com_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})

@@ -343,8 +343,8 @@ int main(int argc, char **argv) {
 	colObjVec[0].primitives.resize(1);
 	colObjVec[0].primitives[0].type = colObjVec[0].primitives[0].BOX;
 	colObjVec[0].primitives[0].dimensions.resize(3);
-	colObjVec[0].primitives[0].dimensions[1] = .045;//.07;
 	colObjVec[0].primitives[0].dimensions[0] = .045;//.10;
+	colObjVec[0].primitives[0].dimensions[1] = .045;//.07;
 	colObjVec[0].primitives[0].dimensions[2] = box_h;
 
 	// smallBox1 (table)
