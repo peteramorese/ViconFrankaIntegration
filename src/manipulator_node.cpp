@@ -47,8 +47,8 @@ class PlanningQuerySrv {
 		// DEFINE CONSTANTS FOR PROBLEM
 		const double bag_l = .045;
 		const double bag_w = .045;
-		const double bag_h = .164;
-		const double eef_offset = .10;
+		const double bag_h = .155;
+		const double eef_offset = .14;//.085;
 		const double grip_width_closed = .044;
 		const double grip_width_open = .1;
 		const double grip_speed = .1;
@@ -80,7 +80,9 @@ class PlanningQuerySrv {
 					std::cout<<"made it out of removing!"<<std::endl;
 				}
 			}
-			planning_scene_interface_ptr->applyCollisionObjects(temp_col_vec);
+			// PUT THIS BACK IN
+			//planning_scene_interface_ptr->applyCollisionObjects(temp_col_vec);
+			//
 			//planning_scene_interface_ptr->addCollisionObjects(col_obj_vec);
 
 		}
@@ -190,13 +192,22 @@ class PlanningQuerySrv {
 					move_group_ptr->setJointValueTarget(joint_val_target);
 				} else {
 					tf2::Quaternion q_orig, q_in, q_f, q_rot, q_set;
-					q_orig[0] = 0;
-					q_orig[1] = 0;
-					q_orig[2] = bag_h/2 + eef_offset;
-					q_orig[3] = 0;
+					if (request.transit_grasp_type == "up") {
+						q_orig[0] = 0;
+						q_orig[1] = 0;
+						q_orig[2] = bag_h/2 + eef_offset;
+						q_orig[3] = 0;
 
+						q_set.setRPY(0, M_PI, -M_PI/4);
+					} else if (request.transit_grasp_type == "side") {
+						q_orig[0] = 0;
+						q_orig[2] = 0;
+						q_orig[1] = bag_w/2 + eef_offset;
+						q_orig[3] = 0;
+
+						q_set.setRPY(0, -M_PI/2, -M_PI/4);
+					}
 					tf2::convert(request.manipulator_pose.orientation, q_in);
-					q_set.setRPY(0, M_PI, -M_PI/4);
 					q_f = q_in * q_orig * q_in.inverse(); 
 					q_rot = q_in * q_set;
 

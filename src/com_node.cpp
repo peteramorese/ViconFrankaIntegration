@@ -7,67 +7,15 @@
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Point.h"
 #include "geometry_msgs/Quaternion.h"
-/*
-struct EnvironmentSub {
-        int num_bags;
-        bool bags_found;
-        bool& begin;
-        bool& run;
 
-        // This will hold the locations of the bags that are found, and will eventually hold
-        // the hard-coded drop off locations (edited manually in the code)
-        river_ros::BagConfigPoseArray_msg pose_array_copy;
-
-        // This maps the location labels to the array index for easy lookup
-        std::unordered_map<std::string, int> label_ind_map;
-
-        EnvironmentSub(bool& begin_, bool& run_) : begin(begin_), run(run_) {
-                run = true;
-                bags_found = false;
-        }
-
-        void envSubCB(const river_ros::BagConfigPoseArray_msg::ConstPtr& env_pose_array){
-                std::cout<<"recieved msg BagConfigPoseArray"<<std::endl;
-                bags_found = env_pose_array->bags_found;
-                if (bags_found && begin && run) {
-                        run = false;
-                        // Must copy over all data and store in local variable because msg is deallocated
-                        pose_array_copy.domain_labels = env_pose_array->domain_labels;
-                        pose_array_copy.pose_array.header.stamp = env_pose_array->pose_array.header.stamp;
-                        num_bags = env_pose_array->pose_array.poses.size();
-                        pose_array_copy.pose_array.poses.resize(num_bags);
-                        for (int i=0; i<num_bags; ++i)  {
-                                pose_array_copy.pose_array.poses[i].position.x = env_pose_array->pose_array.poses[i].position.x;
-                                pose_array_copy.pose_array.poses[i].position.y = env_pose_array->pose_array.poses[i].position.y;
-                                pose_array_copy.pose_array.poses[i].position.z = env_pose_array->pose_array.poses[i].position.z;
-                                pose_array_copy.pose_array.poses[i].orientation.x = env_pose_array->pose_array.poses[i].orientation.x;
-                                pose_array_copy.pose_array.poses[i].orientation.y = env_pose_array->pose_array.poses[i].orientation.y;
-                                pose_array_copy.pose_array.poses[i].orientation.z = env_pose_array->pose_array.poses[i].orientation.z;
-                                pose_array_copy.pose_array.poses[i].orientation.w = env_pose_array->pose_array.poses[i].orientation.w;
- //std::cout<<" MAPPING: "<<pose_array_copy.domain_labels[i]<<" to: "<<i<<std::endl;
-                                //label_ind_map[pose_array_copy.domain_labels[i]] = i;
-                        }
-                        //std::cout<<" ME MAP L_0 AND L_1"<<std::endl;
-                        //label_ind_map["L__0"] = 0;
-                        //label_ind_map["L_1"] = 1;
-                } else {
-                        std::cout<<" --bags were not found or TP not initiated"<<std::endl;
-                }
-        }
-        void mapSize(const std::string& label) {
-                std::cout<<" MAPPING: "<<label<<" to: "<<pose_array_copy.pose_array.poses.size() - 1<<std::endl;
-                label_ind_map[label] = pose_array_copy.pose_array.poses.size() - 1;
-        }
-};
-*/
 
 class RetrieveData {
         private:
                 class callbackdata {
 			private:
-				float x_offset = -.021544;
-				float y_offset = .19416;
-				float z_offset = .038176 - .060;
+				float x_offset = 0; //-.021544;
+				float y_offset = 0;//.19416;
+				float z_offset = 0; //.139;
                         public:
                                 void sub_callback(const geometry_msgs::PoseStamped::ConstPtr& pose_msg_ptr) {
                                         //std::cout<< "x: " << pose_msg_ptr->pose.position.x << std::endl;
@@ -97,9 +45,9 @@ class RetrieveData {
                         hasdata = false;
 			sub_data.resize(3);
 			std::cout<<"sub data size: "<<sub_data.size()<<std::endl;
-			sub_box_1 = SUB_NH->subscribe("/vrpn_client_node/smallBox1/pose", 10, &callbackdata::sub_callback, &sub_data[0]);
-			sub_box_2 = SUB_NH->subscribe("/vrpn_client_node/smallBox2/pose", 10, &callbackdata::sub_callback, &sub_data[1]);
-			sub_box_3 = SUB_NH->subscribe("/vrpn_client_node/smallBox3/pose", 10, &callbackdata::sub_callback, &sub_data[2]);
+			sub_box_1 = SUB_NH->subscribe("/vrpn_client_node/box1/pose", 10, &callbackdata::sub_callback, &sub_data[0]);
+			sub_box_2 = SUB_NH->subscribe("/vrpn_client_node/box2/pose", 10, &callbackdata::sub_callback, &sub_data[1]);
+			sub_box_3 = SUB_NH->subscribe("/vrpn_client_node/box3/pose", 10, &callbackdata::sub_callback, &sub_data[2]);
 		}
 
 
@@ -186,20 +134,23 @@ class PredicateGenerator {
                 };
                 std::vector<coord> locations;
                 //std::vector<bool> is_occupied;
-                double max_r;
+		std::vector<double> max_r_arr;
                 // Store quaternion for all hard-coded drop off locations, this assumes
                 // all bags should be placed in the same orientation
                 double qx, qy, qz, qw;
         public:
-                PredicateGenerator(double max_r_) : max_r(max_r_) {}
-                void addLocation(double x, double y, double z, const std::string& coord_label) {
+                PredicateGenerator() {
+			locations.clear();
+			max_r_arr.clear();
+		}
+                void addLocation(double x, double y, double z, const std::string& coord_label, double max_r) {
                         coord temp_coord;
                         temp_coord.x = x;
                         temp_coord.y = y;
                         temp_coord.z = z;
                         temp_coord.label = coord_label;
                         locations.push_back(temp_coord);
-                        //is_occupied.push_back(false);
+			max_r_arr.push_back(max_r);
                 }
                 geometry_msgs::Point getLocation(const std::string& coord_label) {
 			geometry_msgs::Point ret_pose;
@@ -294,13 +245,15 @@ class PredicateGenerator {
 					locations_ind = i;
 				}
                         }
-                        if (min_dist < max_r) {
+			std::cout<<"max r: "<<max_r_arr[locations_ind]<<" for location: "<<locations_ind<<std::endl;
+			std::cout<<"min dist: "<<min_dist<<std::endl;
+                        if (min_dist < max_r_arr[locations_ind]) {
                                 ret_coord_label = locations[locations_ind].label;
                                 //is_occupied[locations_ind] = true;
                                 return true;
                         } else {
-                                return false;
                                 ROS_WARN("Did not find a location within the maximum radius");
+                                return false;
                         }
 		}
 		bool getPredicates(geometry_msgs::PoseArray* obj_locs, std::vector<std::string>& ret_state) {
@@ -328,12 +281,16 @@ int main(int argc, char **argv) {
 	ros::NodeHandle com_NH;
 
 	RetrieveData vicon_data(10, &com_NH);
-	PredicateGenerator pred_gen(0.15); // set detection radius to 15 cm
-	pred_gen.addLocation(.4, -.4, .09, "l0");
-	pred_gen.addLocation(.4, .4, .09, "l1");
-	pred_gen.addLocation(0, .4, .09, "l2");
-	pred_gen.addLocation(-.4, -.4, .09, "l3");
-	pred_gen.addLocation(-.4, .4, .09, "l4");
+	PredicateGenerator pred_gen; // set detection radius to 15 cm
+	pred_gen.addLocation(.4, -.4, .09, "l0", .15);
+	pred_gen.addLocation(.4, .4, .09, "l1", .15);
+
+	//pred_gen.addLocation(0, .4, .20, "arch_c", .03); // center of the arch
+	//pred_gen.addLocation(.08, .4, .09, "arch_left", .03); // left of the arch
+	//pred_gen.addLocation(-.08, .4, .09, "arch_right", .03); // right of the arch
+	pred_gen.addLocation(0, .4, .09, "l2", .15);
+	pred_gen.addLocation(-.4, -.4, .09, "l3", .15);
+	pred_gen.addLocation(-.4, .4, .09, "l5", .15);
 
 	ros::ServiceClient strategy_srv_client = com_NH.serviceClient<vicon_franka_integration::Strategy>("/com_node/strategy");
 	vicon_franka_integration::Strategy strategy_srv;	
@@ -402,6 +359,7 @@ int main(int argc, char **argv) {
 				plan_query_srv.request.setup_environment = false;
 				//plan_query_srv.request.bag_labels = bag_labels;
 				//plan_query_srv.request.bag_domain_labels = bag_domain_labels;
+				std::cout<<"obj id: "<<bag_labels[obj_ind]<<std::endl;
 				plan_query_srv.request.pickup_object = bag_labels[obj_ind];
 				plan_query_srv.request.drop_object = "none";
 				plan_query_srv.request.planning_domain = "domain";
@@ -413,6 +371,7 @@ int main(int argc, char **argv) {
 				//plan_query_srv.request.bag_labels = bag_labels;
 				//plan_query_srv.request.bag_domain_labels = bag_domain_labels;
 				plan_query_srv.request.pickup_object = "none";
+				std::cout<<"obj id: "<<bag_labels[obj_ind]<<std::endl;
 				plan_query_srv.request.drop_object = bag_labels[obj_ind];
 				plan_query_srv.request.planning_domain = "domain";
 				plan_query_srv.request.safe_config = false;
