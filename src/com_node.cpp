@@ -7,6 +7,7 @@
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Point.h"
 #include "geometry_msgs/Quaternion.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 
 
 class RetrieveData {
@@ -129,7 +130,7 @@ class RetrieveData {
 class PredicateGenerator {
         private:
                 struct coord {
-                        double x, y, z;
+			geometry_msgs::Pose pose;
                         std::string label;
                 };
                 std::vector<coord> locations;
@@ -143,33 +144,31 @@ class PredicateGenerator {
 			locations.clear();
 			max_r_arr.clear();
 		}
-                void addLocation(double x, double y, double z, const std::string& coord_label, double max_r) {
+		void addLocation(geometry_msgs::Point loc_center, geometry_msgs::Quaternion release_orientation, const std::string& coord_label, double max_r) {
                         coord temp_coord;
-                        temp_coord.x = x;
-                        temp_coord.y = y;
-                        temp_coord.z = z;
+                        temp_coord.pose.position = loc_center;
+                        temp_coord.pose.orientation = release_orientation;
                         temp_coord.label = coord_label;
                         locations.push_back(temp_coord);
-			max_r_arr.push_back(max_r);
+                        max_r_arr.push_back(max_r);
                 }
-                geometry_msgs::Point getLocation(const std::string& coord_label) {
-			geometry_msgs::Point ret_pose;
+		geometry_msgs::Pose getLocation(const std::string& coord_label) {
+                        geometry_msgs::Point ret_pose;
+                        bool found = false;
+                        int ind = -1;
                         for (int i=0; i<locations.size(); ++i) {
                                 if (locations[i].label == coord_label) {
-                                        ret_pose.x = locations[i].x;
-                                        ret_pose.y = locations[i].y;
-                                        ret_pose.z = locations[i].z;
-					/*
-                                        ret_pose.orientation.x = qx;
-                                        ret_pose.orientation.y = qy;
-                                        ret_pose.orientation.z = qz;
-                                        ret_pose.orientation.w = qw;
-					*/
+                                        ind = i;
+                                        found = true;
                                         break;
                                 }
                         }
-			return ret_pose;
+                        if (!found) {
+                                ROS_WARN("Location not found");
+                        }
+                        return locations[ind].pose;
                 }
+
 		/*
                 void getUnoccupiedLocation(geometry_msgs::Pose& ret_pose, std::string& ret_label) {
                         // This will return the first unoccupied location, then set
@@ -198,9 +197,9 @@ class PredicateGenerator {
                 }
                 double cartDist(double x, double y, double z, const coord& coord) {
                         double sum = 0;
-                        sum += (x - coord.x)*(x - coord.x);
-                        sum += (y - coord.y)*(y - coord.y);
-                        sum += (z - coord.z)*(z - coord.z);
+                        sum += (x - coord.pose.position.x)*(x - coord.pose.position.x);
+                        sum += (y - coord.pose.position.y)*(y - coord.pose.position.y);
+                        sum += (z - coord.pose.position.z)*(z - coord.pose.position.z);
                         sum = std::sqrt(sum);
                         return sum;
                 }
@@ -280,18 +279,59 @@ int main(int argc, char **argv) {
 	ros::init(argc, argv, "com_node");
 	ros::NodeHandle com_NH;
 
-	RetrieveData vicon_data(10, &com_NH);
-	PredicateGenerator pred_gen; // set detection radius to 15 cm
-	pred_gen.addLocation(.4, -.4, .09, "l0", .15);
-	pred_gen.addLocation(.4, .4, .09, "l1", .15);
+        RetrieveData vicon_data(30, &com_NH);
+        PredicateGenerator pred_gen; // set detection radius to 15 cm
+        // Quaternion for downwards release:
+        tf2::Quaternion q_init, q_down, q_side, q_rot_down, q_rot_side;
+        q_init[0] = 0;
+        q_init[1] = 0;
+        q_init[2] = 1;
+        q_init[3] = 0;
+        //q_rot_down.setRPY(0, M_PI, -M_PI/4);
+        //q_down = q_rot_down * q_init;
+        q_down = q_init;
+        geometry_msgs::Quaternion q_down_msg, q_side_msg;
+        tf2::convert(q_down, q_down_msg);
+        q_rot_side.setRPY(-M_PI/2, 0, 0);
+        q_side = q_rot_side * q_init;
+        tf2::convert(q_side, q_side_msg);
+        q_down.normalize();
+        q_side.normalize();
 
-	//pred_gen.addLocation(0, .4, .20, "arch_c", .03); // center of the arch
-	//pred_gen.addLocation(.08, .4, .09, "arch_left", .03); // left of the arch
-	//pred_gen.addLocation(-.08, .4, .09, "arch_right", .03); // right of the arch
-	pred_gen.addLocation(0, .4, .09, "l2", .15);
-	pred_gen.addLocation(-.4, -.4, .09, "l3", .15);
-	pred_gen.addLocation(-.4, .4, .09, "l5", .15);
+        std::vector<std::string> loc_labels = {"l1", "l2", "l3", "l4", "l5"};
+        geometry_msgs::Point p;
+                p.x = 0;
+        p.y = .35;
+        p.z = .185;
+        pred_gen.addLocation(p, q_side_msg, loc_labels[0], .08); // center of the arch
 
+        p.x = .075;
+        p.y = .4;
+        p.z = .08;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[1], .05); // left of the arch
+
+	p.x = -.075;
+        p.y = .4;
+        p.z = .08;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[2], .05); // right of the arch
+
+	p.x = .5;
+        p.y = -.25;
+        p.z = .08;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[3], .15); // L4
+
+        p.x = .5;
+        p.y = .25;
+        p.z = .08;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[4], .15); // L5
+
+        //p.x = -.4;
+        //p.y = .3;
+        //p.z = .08;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[2], .15); // L2
+
+
+	
 	ros::ServiceClient strategy_srv_client = com_NH.serviceClient<vicon_franka_integration::Strategy>("/com_node/strategy");
 	vicon_franka_integration::Strategy strategy_srv;	
 	ros::ServiceClient plan_query_client = com_NH.serviceClient<vicon_franka_integration::PlanningQuery_srv>("/planning_query");
@@ -324,10 +364,13 @@ int main(int argc, char **argv) {
 			int obj_ind = strategy_srv.response.obj;
 			std::string to_loc = strategy_srv.response.to_loc;
 			holding_state = strategy_srv.response.curr_state;
-			std::cout<<"Action received: "<<action<<std::endl;
+			std::cout<<"\nAction received: "<<action<<std::endl;
+			std::cout<<"Obj Ind received: "<<obj_ind<<std::endl;
+			std::cout<<"To location received: "<<to_loc<<"\n"<<std::endl;
+
 			if (action == "transit") {
 				plan_query_srv.request.manipulator_pose = data->poses[obj_ind];
-				temp_orient = plan_query_srv.request.manipulator_pose.orientation;
+				//temp_orient = plan_query_srv.request.manipulator_pose.orientation;
 				std::cout<<"size: "<<data->poses.size()<<std::endl;
 				for (int ii=0; ii<data->poses.size(); ii++) {
 					std::cout<<"data stuff for box"<<ii<<": "<<data->poses[1].position.x<<std::endl;
@@ -337,18 +380,38 @@ int main(int argc, char **argv) {
 				plan_query_srv.request.bag_labels = bag_labels;
 				plan_query_srv.request.bag_domain_labels = bag_domain_labels;
 				plan_query_srv.request.pickup_object = "none";
+				plan_query_srv.request.grasp_type = "up";
 				plan_query_srv.request.drop_object = "none";
 				plan_query_srv.request.planning_domain = "domain";
 				plan_query_srv.request.safe_config = false;
-			} else if (action == "transfer") {
-				plan_query_srv.request.manipulator_pose.position = pred_gen.getLocation(to_loc);
-				plan_query_srv.request.manipulator_pose.orientation = temp_orient;
-				temp_orient = plan_query_srv.request.manipulator_pose.orientation;
+			} else if (action == "transit_side") {
+				plan_query_srv.request.manipulator_pose = data->poses[obj_ind];
+				//temp_orient = plan_query_srv.request.manipulator_pose.orientation;
+
+				//std::cout<<"size: "<<data->poses.size()<<std::endl;
+				//for (int ii=0; ii<data->poses.size(); ii++) {
+				//	std::cout<<"data stuff for box"<<ii<<": "<<data->poses[1].position.x<<std::endl;
+				//}
 				plan_query_srv.request.bag_poses = *data;
 				plan_query_srv.request.setup_environment = true;
 				plan_query_srv.request.bag_labels = bag_labels;
 				plan_query_srv.request.bag_domain_labels = bag_domain_labels;
 				plan_query_srv.request.pickup_object = "none";
+				plan_query_srv.request.grasp_type = "side";
+				plan_query_srv.request.drop_object = "none";
+				plan_query_srv.request.planning_domain = "domain";
+				plan_query_srv.request.safe_config = false;
+			} else if (action == "transfer") {
+				plan_query_srv.request.manipulator_pose = pred_gen.getLocation(to_loc);
+				//plan_query_srv.request.manipulator_pose.position = pred_gen.getLocation(to_loc);
+				//plan_query_srv.request.manipulator_pose.orientation = temp_orient;
+				//temp_orient = plan_query_srv.request.manipulator_pose.orientation;
+				plan_query_srv.request.bag_poses = *data;
+				plan_query_srv.request.setup_environment = true;
+				plan_query_srv.request.bag_labels = bag_labels;
+				plan_query_srv.request.bag_domain_labels = bag_domain_labels;
+				plan_query_srv.request.pickup_object = "none";
+				plan_query_srv.request.grasp_type = "up";
 				plan_query_srv.request.drop_object = "none";
 				plan_query_srv.request.planning_domain = "domain";
 				plan_query_srv.request.safe_config = false;

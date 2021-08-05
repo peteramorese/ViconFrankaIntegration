@@ -324,7 +324,7 @@ int main(int argc, char **argv) {
 
 	p.x = 0;
 	p.y = .35;
-	p.z = .19;
+	p.z = .185;
 	pred_gen.addLocation(p, q_side_msg, loc_labels[3], .05); // center of the arch
 
 	p.x = .075;
