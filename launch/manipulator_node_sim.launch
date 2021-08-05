@@ -13,11 +13,6 @@
     <arg name="load_gripper" value="true" />
   </include>
   -->
-  <node name="manipulator_node" pkg="vicon_franka_integration" type="manipulator_node" respawn="false" output="screen">
-    <rosparam command="load" file="$(find panda_moveit_config)/config/kinematics.yaml"/>
-    <param name="/planning_plugin" value="ompl_interface/OMPLPlanner"/>
-    <rosparam command="load" file="$(find panda_moveit_config)/config/ompl_planning.yaml"/>
-  </node>
 
 
 	
@@ -77,6 +72,11 @@
   </include>
   
 
+  <node name="manipulator_node" pkg="vicon_franka_integration" type="manipulator_node" respawn="false" output="screen">
+    <rosparam command="load" file="$(find panda_moveit_config)/config/kinematics.yaml"/>
+    <param name="/planning_plugin" value="ompl_interface/OMPLPlanner"/>
+    <rosparam command="load" file="$(find panda_moveit_config)/config/ompl_planning.yaml"/>
+  </node>
   
   <!-- Run Rviz -->
   <include file="$(find panda_moveit_config)/launch/moveit_rviz.launch">

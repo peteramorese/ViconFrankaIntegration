@@ -282,62 +282,68 @@ class PredicateGenerator {
 
 
 int main(int argc, char **argv) {
-	ros::init(argc, argv, "com_node");
+	ros::init(argc, argv, "planning_node");
 	ros::NodeHandle com_NH;
 
-	RetrieveData vicon_data(10, &com_NH);
+	RetrieveData vicon_data(30, &com_NH);
 	PredicateGenerator pred_gen; // set detection radius to 15 cm
 	// Quaternion for downwards release:
 	tf2::Quaternion q_init, q_down, q_side, q_rot_down, q_rot_side;
 	q_init[0] = 0;
 	q_init[1] = 0;
-	q_init[2] = 0;
-	q_init[3] = 1;
-	q_rot_down.setRPY(0, M_PI, -M_PI/4);
-	q_down = q_rot_down * q_init;
+	q_init[2] = 1;
+	q_init[3] = 0;
+	//q_rot_down.setRPY(0, M_PI, -M_PI/4);
+	//q_down = q_rot_down * q_init;
+	q_down = q_init;
 	geometry_msgs::Quaternion q_down_msg, q_side_msg;
 	tf2::convert(q_down, q_down_msg);
-	q_rot_side.setRPY(0, M_PI + M_PI/2, -M_PI/4);
+	q_rot_side.setRPY(-M_PI/2, 0, 0);
 	q_side = q_rot_side * q_init;
 	tf2::convert(q_side, q_side_msg);
+	q_down.normalize();
+	q_side.normalize();
 
+        std::vector<std::string> loc_labels = {"L0", "L1", "L2", "arch_c", "arch_left", "arch_right"};
+	std::vector<std::string> side_loc_labels = {"arch_c"};
 	geometry_msgs::Point p;
 	p.x = .4;
 	p.y = -.4;
-	p.z = .09;
-	pred_gen.addLocation(p, q_down_msg, "L0", .15);
+	p.z = .08;
+	pred_gen.addLocation(p, q_down_msg, loc_labels[0], .15); // L0
 
 	p.x = .4;
 	p.y = .4;
-	p.z = .09;
-	pred_gen.addLocation(p, q_down_msg, "L1", .15);
-
-	p.x = 0;
-	p.y = .4;
-	p.z = .20;
-	pred_gen.addLocation(p, q_side_msg, "arch_c", .05); // center of the arch
-
-	p.x = .08;
-	p.y = .4;
-	p.z = .09;
-	pred_gen.addLocation(p, q_down_msg, "arch_left", .05); // left of the arch
-
-	p.x = -.08;
-	p.y = .4;
-	p.z = .09;
-	pred_gen.addLocation(p, q_down_msg, "arch_right", .05); // right of the arch
+	p.z = .08;
+	pred_gen.addLocation(p, q_down_msg, loc_labels[1], .15); // L1
 
 	p.x = -.4;
 	p.y = .4;
-	p.z = .09;
-	pred_gen.addLocation(p, q_down_msg, "L3", .15); 
+	p.z = .08;
+	pred_gen.addLocation(p, q_down_msg, loc_labels[2], .15); // L2
+
+	p.x = 0;
+	p.y = .35;
+	p.z = .19;
+	pred_gen.addLocation(p, q_side_msg, loc_labels[3], .05); // center of the arch
+
+	p.x = .075;
+	p.y = .4;
+	p.z = .08;
+	pred_gen.addLocation(p, q_down_msg, loc_labels[4], .05); // left of the arch
+
+	p.x = -.075;
+	p.y = .4;
+	p.z = .08;
+	pred_gen.addLocation(p, q_down_msg, loc_labels[5], .05); // right of the arch
+
 	//pred_gen.addLocation(0, .4, .09, "L2", .15);
 	//pred_gen.addLocation(-.4, -.4, .09, "L3", .15);
 	//pred_gen.addLocation(-.4, .4, .09, "L4", .15);
 
 	//ros::ServiceClient strategy_srv_client = com_NH.serviceClient<vicon_franka_integration::Strategy>("/com_node/strategy");
 	vicon_franka_integration::Strategy strategy_srv;	
-	ros::ServiceClient plan_query_client = com_NH.serviceClient<vicon_franka_integration::PlanningQuery_srv>("/com_node/planning_query");
+	ros::ServiceClient plan_query_client = com_NH.serviceClient<vicon_franka_integration::PlanningQuery_srv>("/planning_query");
 	vicon_franka_integration::PlanningQuery_srv plan_query_srv;	
 
 	geometry_msgs::PoseArray* data = vicon_data.returnConfigArrPtr();
@@ -366,12 +372,12 @@ int main(int argc, char **argv) {
         /* CREATE ENVIRONMENT FOR MANIPULATOR */
         StateSpace SS_MANIPULATOR;
 
-        std::vector<std::string> loc_labels = {"L0", "L1", "L2", "L3", "L4"};
         std::vector<std::string> ee_labels = loc_labels;
         ee_labels.push_back("stow");
         std::vector<std::string> obj_labels = loc_labels;
         obj_labels.push_back("ee");
         std::vector<std::string> grip_labels = {"true","false"};
+        std::vector<std::string> grip_type_labels = {"none","up","side"};
 
         // Create state space:
         SS_MANIPULATOR.setStateDimension(ee_labels, 0); // eef
@@ -379,6 +385,7 @@ int main(int argc, char **argv) {
         SS_MANIPULATOR.setStateDimension(obj_labels, 2); // box2
         SS_MANIPULATOR.setStateDimension(obj_labels, 3); // box3
         SS_MANIPULATOR.setStateDimension(grip_labels, 4); // eef engaged
+        SS_MANIPULATOR.setStateDimension(grip_type_labels, 5); // grip type
 
         // Label state space:
         SS_MANIPULATOR.setStateDimensionLabel(0, "eeLoc");
@@ -386,10 +393,14 @@ int main(int argc, char **argv) {
         SS_MANIPULATOR.setStateDimensionLabel(2, "box2");
         SS_MANIPULATOR.setStateDimensionLabel(3, "box3");
         SS_MANIPULATOR.setStateDimensionLabel(4, "holding");
+        SS_MANIPULATOR.setStateDimensionLabel(5, "grip_type");
 
         // Create object location group:
         std::vector<std::string> obj_group = {"box1", "box2", "box3"};
         SS_MANIPULATOR.setLabelGroup("object locations", obj_group);
+
+	// Create sideways location domain
+	SS_MANIPULATOR.setDomain("side locations", side_loc_labels);
 
         // Set the initial state:
         std::vector<std::string> set_state = {"stow"};
@@ -397,6 +408,7 @@ int main(int argc, char **argv) {
 		set_state.push_back(ret_state[i]);
 	}
 	set_state.push_back("false");
+	set_state.push_back("none");
 	std::cout<<"printing set state"<<std::endl;
 	for (int i=0; i<set_state.size(); ++i){
 		std::cout<<set_state[i]<<std::endl;
@@ -411,11 +423,12 @@ int main(int argc, char **argv) {
         // Pickup domain conditions:
         std::vector<Condition> conds_m;
         std::vector<Condition*> cond_ptrs_m;
-        conds_m.resize(4);
-        cond_ptrs_m.resize(4);
+        conds_m.resize(6);
+        cond_ptrs_m.resize(6);
 
-        // Grasp 
+        // Grasp regular
         conds_m[0].addCondition(Condition::PRE, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "false");
+        conds_m[0].addCondition(Condition::PRE, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "none", Condition::NEGATE, "not_gripping");
         conds_m[0].addCondition(Condition::PRE, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc",Condition::TRUE, "arg");
         conds_m[0].setCondJunctType(Condition::PRE, Condition::CONJUNCTION);
 
@@ -423,13 +436,28 @@ int main(int argc, char **argv) {
         conds_m[0].addCondition(Condition::POST, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "true");
         conds_m[0].setCondJunctType(Condition::POST, Condition::CONJUNCTION);
         conds_m[0].setActionLabel("grasp");
-
-        // Transport 
+	
+	
+        // Transport Up
+        //conds_m[1].addCondition(Condition::PRE, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "true");
+        //conds_m[1].addCondition(Condition::PRE, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc", Condition::NEGATE, "arg1");
+        //conds_m[1].addCondition(Condition::PRE, Condition::LABEL, "eeLoc", Condition::ARG_FIND, Condition::NONE, Condition::FILLER, Condition::TRUE, "arg2");
+        //conds_m[1].setCondJunctType(Condition::PRE, Condition::CONJUNCTION); // Used to store eeLoc pre-state variable
+        //conds_m[1].addCondition(Condition::POST, Condition::ARG_V, Condition::FILLER, Condition::ARG_EQUALS, Condition::LABEL, "eeLoc", Condition::NEGATE, "arg2"); // Stored eeLoc pre-state variable is not the same as post-state eeLoc (eeLoc has moved)
+        //conds_m[1].addCondition(Condition::POST, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc", Condition::NEGATE,"na");
+        //conds_m[1].setCondJunctType(Condition::POST, Condition::CONJUNCTION);
+        //conds_m[1].setActionLabel("transport");
+        //conds_m[1].print();
+	
+	// Transport Up
         conds_m[1].addCondition(Condition::PRE, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "true");
+        conds_m[1].addCondition(Condition::PRE, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "up");
         conds_m[1].addCondition(Condition::PRE, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc", Condition::NEGATE, "arg1");
         conds_m[1].addCondition(Condition::PRE, Condition::LABEL, "eeLoc", Condition::ARG_FIND, Condition::NONE, Condition::FILLER, Condition::TRUE, "arg2");
         conds_m[1].setCondJunctType(Condition::PRE, Condition::CONJUNCTION); // Used to store eeLoc pre-state variable
         conds_m[1].addCondition(Condition::POST, Condition::ARG_V, Condition::FILLER, Condition::ARG_EQUALS, Condition::LABEL, "eeLoc", Condition::NEGATE, "arg2"); // Stored eeLoc pre-state variable is not the same as post-state eeLoc (eeLoc has moved)
+        conds_m[1].addCondition(Condition::POST, Condition::LABEL, "eeLoc", Condition::IN_DOMAIN, Condition::DOMAIN, "side locations", Condition::NEGATE, "na"); // Not in side locations
+        conds_m[1].addCondition(Condition::POST, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "none");
         conds_m[1].addCondition(Condition::POST, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc", Condition::NEGATE,"na");
         conds_m[1].setCondJunctType(Condition::POST, Condition::CONJUNCTION);
         conds_m[1].setActionLabel("transport");
@@ -449,16 +477,59 @@ int main(int argc, char **argv) {
 
 
 
-        // Transit
+        // Transit Up
         conds_m[3].addCondition(Condition::PRE, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "false");
+        conds_m[3].addCondition(Condition::PRE, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "none");
         conds_m[3].addCondition(Condition::PRE, Condition::LABEL, "eeLoc", Condition::ARG_FIND, Condition::NONE, Condition::FILLER, Condition::TRUE, "arg");
         conds_m[3].setCondJunctType(Condition::PRE, Condition::CONJUNCTION);
 
         conds_m[3].addCondition(Condition::POST, Condition::ARG_V, Condition::FILLER, Condition::ARG_EQUALS, Condition::LABEL, "eeLoc", Condition::NEGATE,"arg");
+        conds_m[3].addCondition(Condition::POST, Condition::LABEL, "eeLoc", Condition::IN_DOMAIN, Condition::DOMAIN, "side locations", Condition::NEGATE, "arg_2");
+        conds_m[3].addCondition(Condition::POST, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "up");
         conds_m[3].setCondJunctType(Condition::POST, Condition::CONJUNCTION);
-        conds_m[3].setActionLabel("transit_side");
+        conds_m[3].setActionLabel("transit_up");
         //conds_m[3].print();
 
+
+
+	// Transit Side
+        conds_m[4].addCondition(Condition::PRE, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "false");
+        conds_m[4].addCondition(Condition::PRE, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "none");
+        conds_m[4].addCondition(Condition::PRE, Condition::LABEL, "eeLoc", Condition::ARG_FIND, Condition::NONE, Condition::FILLER, Condition::TRUE, "arg");
+        conds_m[4].setCondJunctType(Condition::PRE, Condition::CONJUNCTION);
+
+        conds_m[4].addCondition(Condition::POST, Condition::ARG_V, Condition::FILLER, Condition::ARG_EQUALS, Condition::LABEL, "eeLoc", Condition::NEGATE,"arg");
+        conds_m[4].addCondition(Condition::POST, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "side");
+        conds_m[4].setCondJunctType(Condition::POST, Condition::CONJUNCTION);
+        conds_m[4].setActionLabel("transit_side");
+        //conds_m[3].print();
+
+	// Transport Side
+        conds_m[5].addCondition(Condition::PRE, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "true");
+        conds_m[5].addCondition(Condition::PRE, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "side");
+        conds_m[5].addCondition(Condition::PRE, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc", Condition::NEGATE, "arg1");
+        conds_m[5].addCondition(Condition::PRE, Condition::LABEL, "eeLoc", Condition::ARG_FIND, Condition::NONE, Condition::FILLER, Condition::TRUE, "arg2");
+        conds_m[5].setCondJunctType(Condition::PRE, Condition::CONJUNCTION); // Used to store eeLoc pre-state variable
+        conds_m[5].addCondition(Condition::POST, Condition::ARG_V, Condition::FILLER, Condition::ARG_EQUALS, Condition::LABEL, "eeLoc", Condition::NEGATE, "arg2"); // Stored eeLoc pre-state variable is not the same as post-state eeLoc (eeLoc has moved)
+        conds_m[5].addCondition(Condition::POST, Condition::LABEL, "eeLoc", Condition::IN_DOMAIN, Condition::DOMAIN, "side locations", Condition::TRUE, "na");
+        conds_m[5].addCondition(Condition::POST, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "none");
+        conds_m[5].addCondition(Condition::POST, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc", Condition::NEGATE,"na");
+        conds_m[5].setCondJunctType(Condition::POST, Condition::CONJUNCTION);
+        conds_m[5].setActionLabel("transport");
+        //conds_m[1].print();
+
+        // Grasp from side
+        //conds_m[5].addCondition(Condition::PRE, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "false");
+        //conds_m[5].addCondition(Condition::PRE, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "none");
+        //conds_m[5].addCondition(Condition::PRE, Condition::GROUP, "object locations", Condition::ARG_FIND, Condition::LABEL, "eeLoc",Condition::TRUE, "arg");
+        //conds_m[5].setCondJunctType(Condition::PRE, Condition::CONJUNCTION);
+
+        //conds_m[5].addCondition(Condition::POST, Condition::ARG_L, Condition::FILLER, Condition::ARG_EQUALS, Condition::VAR, "ee",Condition::TRUE, "arg");
+        //conds_m[5].addCondition(Condition::POST, Condition::LABEL, "holding", Condition::EQUALS, Condition::VAR, "true");
+        //conds_m[5].addCondition(Condition::POST, Condition::LABEL, "grip_type", Condition::EQUALS, Condition::VAR, "side");
+        //conds_m[5].setCondJunctType(Condition::POST, Condition::CONJUNCTION);
+        //conds_m[5].setActionLabel("grasp");
+	
 
         for (int i=0; i<conds_m.size(); ++i){
                 cond_ptrs_m[i] = &conds_m[i];
@@ -478,7 +549,7 @@ int main(int argc, char **argv) {
 			AP[i*obj_group.size() + ii].setCondJunctType(Condition::SIMPLE, Condition::CONJUNCTION);
 			// propositon format i.e.: box1_L1
 			AP[i*obj_group.size() + ii].setLabel(obj_group[ii] + "_" + loc_labels[i]);
-			std::cout<<i*obj_group.size() + ii<<std::endl;
+			//std::cout<<i*obj_group.size() + ii<<std::endl;
 		}
 	}
         for (int i=0; i<AP.size(); ++i) {
@@ -493,8 +564,15 @@ int main(int argc, char **argv) {
         Edge PS(true);
 
         // Hard-code DFA_m automaton:
-        DFA.connect(1, 1, 1.0, "!box1_L1 | !box2_L2 | !box3_L3");
-        DFA.connect(1, 0, 1.0, "box1_L1 & box2_L2 & box3_L3");
+        //DFA.connect(1, 1, 1.0, "!box1_L1 | !box2_L2 | !box3_L3");
+        //DFA.connect(1, 0, 1.0, "box1_L1 & box2_L2 & box3_L3");
+	
+        DFA.connect(1, 1, 1.0, "!box3_arch_left | !box2_arch_right");
+        DFA.connect(1, 0, 1.0, "box3_arch_left & box2_arch_right & !box1_arch_c");
+        DFA.connect(0, 0, 1.0, "!box1_arch_c");
+        DFA.connect(0, 2, 1.0, "box1_arch_c");
+	DFA.print();
+	
 
         //DFA_m1.connect(2, 2, 1.0, "!p_aL4 & !p_rL3");
         //DFA_m1.connect(2, 1, 1.0, "p_aL4 & !p_rL3");
@@ -516,7 +594,7 @@ int main(int argc, char **argv) {
         // Set the atomic propositions and define the initial and accepting states
         PRODSYS.setPropositions(AP_ptrs);
         PRODSYS.setAutomatonInitStateIndex(1);
-        PRODSYS.addAutomatonAcceptingStateIndex(0);
+        PRODSYS.addAutomatonAcceptingStateIndex(2);
 
 	PRODSYS.setInitState(&init_state);
 	PRODSYS.generate();
@@ -543,6 +621,13 @@ int main(int argc, char **argv) {
 			//std::string to_loc = strategy_srv.response.to_loc;
 			//holding_state = strategy_srv.response.curr_state;
 		std::cout<<"Action received: "<<act_seq[i]<<std::endl;
+		vicon_data.retrieve();
+		//if (i == 0) {
+		//	plan_query_srv.request.setup_environment = true;
+		//} else {
+		//	plan_query_srv.request.setup_environment = false;
+		//}
+		plan_query_srv.request.setup_environment = true;
 		if (act_seq[i] == "transit_up") {
 			// Find the location label that the eef moves to
 			std::string temp_loc_label = state_seq[i+1]->getVar("eeLoc");
@@ -560,15 +645,11 @@ int main(int argc, char **argv) {
 			}
 			plan_query_srv.request.manipulator_pose = data->poses[pose_ind];
 			temp_orient = plan_query_srv.request.manipulator_pose.orientation;
-			//for (int ii=0; ii<data->poses.size(); ii++) {
-			//	std::cout<<"data stuff for box"<<ii<<": "<<data->poses[1].position.x<<std::endl;
-			//}
 			plan_query_srv.request.bag_poses = *data;
-			plan_query_srv.request.setup_environment = true;
 			plan_query_srv.request.bag_labels = obj_group;
 			plan_query_srv.request.bag_domain_labels = bag_domain_labels;
 			plan_query_srv.request.pickup_object = "none";
-			plan_query_srv.request.transit_grasp_type = "up";
+			plan_query_srv.request.grasp_type = "up";
 			plan_query_srv.request.drop_object = "none";
 			plan_query_srv.request.planning_domain = "domain";
 			plan_query_srv.request.safe_config = false;
@@ -590,15 +671,12 @@ int main(int argc, char **argv) {
 			}
 			plan_query_srv.request.manipulator_pose = data->poses[pose_ind];
 			temp_orient = plan_query_srv.request.manipulator_pose.orientation;
-			//for (int ii=0; ii<data->poses.size(); ii++) {
-			//	std::cout<<"data stuff for box"<<ii<<": "<<data->poses[1].position.x<<std::endl;
-			//}
 			plan_query_srv.request.bag_poses = *data;
-			plan_query_srv.request.setup_environment = true;
+			//plan_query_srv.request.setup_environment = true;
 			plan_query_srv.request.bag_labels = obj_group;
 			plan_query_srv.request.bag_domain_labels = bag_domain_labels;
 			plan_query_srv.request.pickup_object = "none";
-			plan_query_srv.request.transit_grasp_type = "side";
+			plan_query_srv.request.grasp_type = "side";
 			plan_query_srv.request.drop_object = "none";
 			plan_query_srv.request.planning_domain = "domain";
 			plan_query_srv.request.safe_config = false;
@@ -606,17 +684,24 @@ int main(int argc, char **argv) {
 			std::string temp_loc_label = state_seq[i+1]->getVar("eeLoc");
 			std::cout<<"temp loc label: "<<temp_loc_label<<std::endl;
 			plan_query_srv.request.manipulator_pose = pred_gen.getLocation(temp_loc_label);
-			//plan_query_srv.request.manipulator_pose.position = pred_gen.getLocation(temp_loc_label);
+			std::cout<<"\n"<<std::endl;
 			std::cout<<plan_query_srv.request.manipulator_pose.position.x<<std::endl;
 			std::cout<<plan_query_srv.request.manipulator_pose.position.y<<std::endl;
 			std::cout<<plan_query_srv.request.manipulator_pose.position.z<<std::endl;
+			std::cout<<plan_query_srv.request.manipulator_pose.position.z<<std::endl;
+			std::cout<<plan_query_srv.request.manipulator_pose.orientation.x<<std::endl;
+			std::cout<<plan_query_srv.request.manipulator_pose.orientation.y<<std::endl;
+			std::cout<<plan_query_srv.request.manipulator_pose.orientation.z<<std::endl;
+			std::cout<<plan_query_srv.request.manipulator_pose.orientation.w<<std::endl;
+			//plan_query_srv.request.manipulator_pose.position = pred_gen.getLocation(temp_loc_label);
 			//plan_query_srv.request.manipulator_pose.orientation = temp_orient;
 			//temp_orient = plan_query_srv.request.manipulator_pose.orientation;
 			plan_query_srv.request.bag_poses = *data;
-			plan_query_srv.request.setup_environment = true;
+			//plan_query_srv.request.setup_environment = true;
 			plan_query_srv.request.bag_labels = bag_labels;
 			plan_query_srv.request.bag_domain_labels = bag_domain_labels;
 			plan_query_srv.request.pickup_object = "none";
+			plan_query_srv.request.grasp_type = "up";
 			plan_query_srv.request.drop_object = "none";
 			plan_query_srv.request.planning_domain = "domain";
 			plan_query_srv.request.safe_config = false;

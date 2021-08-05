@@ -294,7 +294,7 @@ int main(int argc, char **argv) {
 
 	ros::ServiceClient strategy_srv_client = com_NH.serviceClient<vicon_franka_integration::Strategy>("/com_node/strategy");
 	vicon_franka_integration::Strategy strategy_srv;	
-	ros::ServiceClient plan_query_client = com_NH.serviceClient<vicon_franka_integration::PlanningQuery_srv>("/com_node/planning_query");
+	ros::ServiceClient plan_query_client = com_NH.serviceClient<vicon_franka_integration::PlanningQuery_srv>("/planning_query");
 	vicon_franka_integration::PlanningQuery_srv plan_query_srv;	
 
 	geometry_msgs::PoseArray* data = vicon_data.returnConfigArrPtr();

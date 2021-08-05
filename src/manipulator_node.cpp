@@ -45,10 +45,10 @@ class PlanningQuerySrv {
 				ROS_INFO_NAMED("manipulator_node","Found franka_gripper action.");
 			}
 		// DEFINE CONSTANTS FOR PROBLEM
-		const double bag_l = .045;
+		const double bag_l = .07;//.045;
 		const double bag_w = .045;
-		const double bag_h = .155;
-		const double eef_offset = .14;//.085;
+		const double bag_h = .157;
+		const double eef_offset = .085;
 		const double grip_width_closed = .044;
 		const double grip_width_open = .1;
 		const double grip_speed = .1;
@@ -81,9 +81,8 @@ class PlanningQuerySrv {
 				}
 			}
 			// PUT THIS BACK IN
-			//planning_scene_interface_ptr->applyCollisionObjects(temp_col_vec);
+			planning_scene_interface_ptr->applyCollisionObjects(temp_col_vec);
 			//
-			//planning_scene_interface_ptr->addCollisionObjects(col_obj_vec);
 
 		}
 		void findObjAndUpdate(std::string obj_id, std::string domain_label_) {
@@ -138,9 +137,6 @@ class PlanningQuerySrv {
 					std::cout<<"Adding object: "<<temp_col_obj.id<<" to domain: "<<request.bag_domain_labels[i]<<std::endl;
 					//col_obj_vec[i].operation = col_obj_vec[i].ADD;
 				}
-				//planning_scene_interface_ptr->applyCollisionObjects(col_obj_vec);
-				//planning_scene_interface_ptr->addCollisionObjects(col_obj_vec);
-				std::cout<<"done setting up env"<<std::endl;
 				setupEnvironment(request.planning_domain);
 			}
 
@@ -192,20 +188,27 @@ class PlanningQuerySrv {
 					move_group_ptr->setJointValueTarget(joint_val_target);
 				} else {
 					tf2::Quaternion q_orig, q_in, q_f, q_rot, q_set;
-					if (request.transit_grasp_type == "up") {
+					if (request.grasp_type == "up") {
+						std::cout<<" Grasp Type: up"<<std::endl;
 						q_orig[0] = 0;
 						q_orig[1] = 0;
 						q_orig[2] = bag_h/2 + eef_offset;
 						q_orig[3] = 0;
 
 						q_set.setRPY(0, M_PI, -M_PI/4);
-					} else if (request.transit_grasp_type == "side") {
-						q_orig[0] = 0;
+					} else if (request.grasp_type == "side") {
+						std::cout<<" Grasp Type: side"<<std::endl;
+						q_orig[0] = bag_w/2 + eef_offset;
+						q_orig[1] = 0;
 						q_orig[2] = 0;
-						q_orig[1] = bag_w/2 + eef_offset;
 						q_orig[3] = 0;
 
-						q_set.setRPY(0, -M_PI/2, -M_PI/4);
+						q_set.setRPY(0, M_PI, -M_PI/4);
+						tf2::Quaternion q_set_2;
+						q_set_2.setRPY(0, M_PI/2, 0);
+						q_set = q_set_2 * q_set;
+					} else {
+						ROS_ERROR_NAMED("manipulator_node","Unrecognized grasp type");
 					}
 					tf2::convert(request.manipulator_pose.orientation, q_in);
 					q_f = q_in * q_orig * q_in.inverse(); 
@@ -214,6 +217,11 @@ class PlanningQuerySrv {
 					pose.position.x = request.manipulator_pose.position.x + q_f[0];
 					pose.position.y = request.manipulator_pose.position.y + q_f[1];
 					pose.position.z = request.manipulator_pose.position.z + q_f[2];
+					//pose.position.x = pose.position.x + .4;
+					//pose.position.y = pose.position.y + .4;
+					//if (request.grasp_type == "side") {
+					//	pose.position.z = pose.position.z + .2;
+					//}
 					q_rot.normalize();
 					pose.orientation.x = q_rot[0];
 					pose.orientation.y = q_rot[1];  
@@ -424,7 +432,7 @@ int main(int argc, char **argv) {
 	PlanningQuerySrv plan_query_srv_container(&move_group, &planning_scene_interface, &grip_client, 5);
 	plan_query_srv_container.setWorkspace(colObjVec, colObjVec_domain_lbls);
 
-	ros::ServiceServer plan_query_service = M_NH.advertiseService("/com_node/planning_query", &PlanningQuerySrv::planQuery_serviceCB, &plan_query_srv_container);
+	ros::ServiceServer plan_query_service = M_NH.advertiseService("/planning_query", &PlanningQuerySrv::planQuery_serviceCB, &plan_query_srv_container);
 
 	ros::waitForShutdown();
 	return 0;
