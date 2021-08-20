@@ -177,80 +177,109 @@ class PlanningQuerySrv {
 			} else {
 				setupEnvironment(request.planning_domain);
 				std::cout<<"moving"<<std::endl;
-				geometry_msgs::Pose pose;
+				std::vector<geometry_msgs::Pose> poses;
 				moveit::planning_interface::MoveGroupInterface::Plan plan;
 
-				move_group_ptr->setStartStateToCurrentState();
 
 				// Convert from PoseStamed to Pose
 				if (request.safe_config) {
 					std::vector<double> joint_val_target = {0.0, -.785398, 0.0, -2.35619, 1.5708, .785398};
 					move_group_ptr->setJointValueTarget(joint_val_target);
 				} else {
-					tf2::Quaternion q_orig, q_in, q_f, q_rot, q_set;
+					tf2::Quaternion q_orig, q_in, q_set;
+					std::vector<tf2::Quaternion> q_f; 
+					std::vector<tf2::Quaternion> q_rot;
+					tf2::convert(request.manipulator_pose.orientation, q_in);
 					if (request.grasp_type == "up") {
 						std::cout<<" Grasp Type: up"<<std::endl;
+						int N_grasps = 1;
+						q_f.resize(N_grasps);
+						q_rot.resize(N_grasps);
+						poses.resize(N_grasps);
+
 						q_orig[0] = 0;
 						q_orig[1] = 0;
 						q_orig[2] = bag_h/2 + eef_offset;
 						q_orig[3] = 0;
-
 						q_set.setRPY(0, M_PI, -M_PI/4);
+						// Rotate the q
+						q_f[0] = q_in * q_orig * q_in.inverse(); 
+						q_rot[0] = q_in * q_set;
+
 					} else if (request.grasp_type == "side") {
 						std::cout<<" Grasp Type: side"<<std::endl;
+						int N_grasps = 2;
+						q_f.resize(N_grasps);
+						q_rot.resize(N_grasps);
+						poses.resize(N_grasps);
+
 						q_orig[0] = bag_w/2 + eef_offset;
 						q_orig[1] = 0;
 						q_orig[2] = 0;
 						q_orig[3] = 0;
-
+						// 90 degrees
 						q_set.setRPY(0, M_PI, -M_PI/4);
-						tf2::Quaternion q_set_2;
-						q_set_2.setRPY(0, M_PI/2, 0);
-						q_set = q_set_2 * q_set;
+						{
+							tf2::Quaternion q_set_2;
+							q_set_2.setRPY(0, M_PI/2, 0);
+							q_set = q_set_2 * q_set;
+						}
+						q_f[0] = q_in * q_orig * q_in.inverse(); 
+						q_rot[0] = q_in * q_set;
+
+						// -90 degrees
+						q_set.setRPY(0, M_PI, -M_PI/4);
+						{
+							tf2::Quaternion q_set_2;
+							q_set_2.setRPY(0, -M_PI/2, 0);
+							q_set = q_set_2 * q_set;
+						}
+						q_f[1] = q_in * q_orig * q_in.inverse(); 
+						q_rot[1] = q_in * q_set;
+
 					} else {
 						ROS_ERROR_NAMED("manipulator_node","Unrecognized grasp type");
 					}
-					tf2::convert(request.manipulator_pose.orientation, q_in);
-					q_f = q_in * q_orig * q_in.inverse(); 
-					q_rot = q_in * q_set;
 
-					pose.position.x = request.manipulator_pose.position.x + q_f[0];
-					pose.position.y = request.manipulator_pose.position.y + q_f[1];
-					pose.position.z = request.manipulator_pose.position.z + q_f[2];
-					//pose.position.x = pose.position.x + .4;
-					//pose.position.y = pose.position.y + .4;
-					//if (request.grasp_type == "side") {
-					//	pose.position.z = pose.position.z + .2;
-					//}
-					q_rot.normalize();
-					pose.orientation.x = q_rot[0];
-					pose.orientation.y = q_rot[1];  
-					pose.orientation.z = q_rot[2];
-					pose.orientation.w = q_rot[3];
-					move_group_ptr->setPoseTarget(pose);
+					for (int ii=0; ii<poses.size(); ++ii) {
+						poses[ii].position.x = request.manipulator_pose.position.x + q_f[ii][0];
+						poses[ii].position.y = request.manipulator_pose.position.y + q_f[ii][1];
+						poses[ii].position.z = request.manipulator_pose.position.z + q_f[ii][2];
+						q_rot[ii].normalize();
+						poses[ii].orientation.x = q_rot[ii][0];
+						poses[ii].orientation.y = q_rot[ii][1];  
+						poses[ii].orientation.z = q_rot[ii][2];
+						poses[ii].orientation.w = q_rot[ii][3];
+					}
+					//move_group_ptr->setPoseTarget(pose);
 				}
 				move_group_ptr->setPlanningTime(5.0);
 
-				ROS_INFO_NAMED("manipulator_node", "Reference frame: %s", move_group_ptr->getPlanningFrame().c_str());
-				std::cout<<"moving to x: "<< pose.position.x<<std::endl;
-				std::cout<<"moving to y: "<< pose.position.y<<std::endl;
-				std::cout<<"moving to z: "<< pose.position.z<<std::endl;
-				std::cout<<"moving to qx: "<< pose.orientation.x<<std::endl;
-				std::cout<<"moving to qy: "<< pose.orientation.y<<std::endl;
-				std::cout<<"moving to qz: "<< pose.orientation.z<<std::endl;
-				std::cout<<"moving to qw: "<< pose.orientation.w<<std::endl;
+				//ROS_INFO_NAMED("manipulator_node", "Reference frame: %s", move_group_ptr->getPlanningFrame().c_str());
+				//std::cout<<"moving to x: "<< pose.position.x<<std::endl;
+				//std::cout<<"moving to y: "<< pose.position.y<<std::endl;
+				//std::cout<<"moving to z: "<< pose.position.z<<std::endl;
+				//std::cout<<"moving to qx: "<< pose.orientation.x<<std::endl;
+				//std::cout<<"moving to qy: "<< pose.orientation.y<<std::endl;
+				//std::cout<<"moving to qz: "<< pose.orientation.z<<std::endl;
+				//std::cout<<"moving to qw: "<< pose.orientation.w<<std::endl;
 				bool success = false;
 				for (int ii=0; ii<N_TRIALS; ii++){
-					ros::WallDuration(3.0).sleep();
-					std::cout<<"before plan"<<std::endl;
-					//move_group_ptr->plan(plan);
-					std::cout<<"before execute"<<std::endl;
-					//success = (move_group_ptr->execute(plan)==moveit::planning_interface::MoveItErrorCode::SUCCESS);
 					moveit::planning_interface::MoveGroupInterface::Plan plan_;
-					success = (move_group_ptr->plan(plan_)==moveit::planning_interface::MoveItErrorCode::SUCCESS);
-					if (success){
-						ROS_INFO_NAMED("manipulator_node","Completed planning on iteration: %d",ii);
-						move_group_ptr->execute(plan_);
+
+					move_group_ptr->setStartStateToCurrentState();
+					for (int iii=0; iii<poses.size(); ++iii) {
+						std::cout<<" --- Working on grasp: "<<iii<<" --- "<<std::endl;
+						move_group_ptr->setPoseTarget(poses[iii]);
+						ros::WallDuration(1.0).sleep();
+						success = (move_group_ptr->plan(plan_)==moveit::planning_interface::MoveItErrorCode::SUCCESS);
+						if (success){
+							ROS_INFO_NAMED("manipulator_node","Completed planning on iteration: %d",ii);
+							move_group_ptr->execute(plan_);
+							break;
+						}
+					}
+					if (success) {
 						break;
 					}
 					ros::WallDuration(1.0).sleep();

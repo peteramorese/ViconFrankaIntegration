@@ -307,25 +307,25 @@ int main(int argc, char **argv) {
         std::vector<std::string> loc_labels = {"L0", "L1", "L2", "arch_c", "arch_left", "arch_right"};
 	std::vector<std::string> side_loc_labels = {"arch_c"};
 	geometry_msgs::Point p;
-	p.x = .4;
-	p.y = -.4;
+	p.x = .5;
+	p.y = -.25;
 	p.z = .08;
 	pred_gen.addLocation(p, q_down_msg, loc_labels[0], .15); // L0
 
-	p.x = .4;
-	p.y = .4;
+	p.x = .5;
+	p.y = .25;
 	p.z = .08;
 	pred_gen.addLocation(p, q_down_msg, loc_labels[1], .15); // L1
 
-	p.x = -.4;
-	p.y = .4;
+	p.x = -.5;
+	p.y = .25;
 	p.z = .08;
 	pred_gen.addLocation(p, q_down_msg, loc_labels[2], .15); // L2
 
 	p.x = 0;
 	p.y = .35;
 	p.z = .185;
-	pred_gen.addLocation(p, q_side_msg, loc_labels[3], .05); // center of the arch
+	pred_gen.addLocation(p, q_side_msg, loc_labels[3], .08); // center of the arch
 
 	p.x = .075;
 	p.y = .4;
@@ -370,7 +370,7 @@ int main(int argc, char **argv) {
 
 	// Plan	
         /* CREATE ENVIRONMENT FOR MANIPULATOR */
-        StateSpace SS_MANIPULATOR;
+        BlockingStateSpace SS_MANIPULATOR;
 
         std::vector<std::string> ee_labels = loc_labels;
         ee_labels.push_back("stow");
@@ -413,7 +413,10 @@ int main(int argc, char **argv) {
 	for (int i=0; i<set_state.size(); ++i){
 		std::cout<<set_state[i]<<std::endl;
 	}
-        State init_state(&SS_MANIPULATOR);
+        BlockingState init_state(&SS_MANIPULATOR);
+	std::vector<bool> blocking_dims = {false, true, true, true, true, true};
+        init_state.setBlockingDim(blocking_dims);
+	init_state.toggleDebug(false);
         init_state.setState(set_state);
 
         //State test_state(&SS_MANIPULATOR);    
@@ -585,7 +588,7 @@ int main(int argc, char **argv) {
         //std::cout<<"DFA 1 listsize: "<<DFA_m1.returnListCount()<<std::endl;
 
         // Define the product systems after the automatons have been defined
-        ProductSystem<State> PRODSYS(&TS, &DFA, &PS);
+        ProductSystem<BlockingState> PRODSYS(&TS, &DFA, &PS);
 
 
         // Set the pre and post conditions, same for both systems in this case
@@ -602,7 +605,7 @@ int main(int argc, char **argv) {
 	PRODSYS.compose();
 	bool plan_found = PRODSYS.plan();
 	
-	std::vector<State*> state_seq;
+	std::vector<BlockingState*> state_seq;
 	std::vector<std::string> act_seq;
 
 	PRODSYS.getPlan(state_seq, act_seq);
