@@ -14,6 +14,9 @@
   </include>
   -->
 
+  <!-- Launch the vrpn node -->
+  <include file="$(find vrpn_client_ros)/launch/vicon_franka_vrpn.launch"/>
+
 
 	
   <!-- By default, we do not start a database (it can be large) -->
@@ -76,6 +79,7 @@
     <rosparam command="load" file="$(find panda_moveit_config)/config/kinematics.yaml"/>
     <param name="/planning_plugin" value="ompl_interface/OMPLPlanner"/>
     <rosparam command="load" file="$(find panda_moveit_config)/config/ompl_planning.yaml"/>
+    <param name="sim_only" value="true"/>
   </node>
   
   <!-- Run Rviz -->

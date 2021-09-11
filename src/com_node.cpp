@@ -34,21 +34,24 @@ class RetrieveData {
                                 geometry_msgs::PoseStamped* configptr = &config;
                 };
 
-                int Navg;
+                int Navg, Nboxes;
                 bool hasdata;   
                 //geometry_msgs::PoseStamped avgConfig;
                 ros::NodeHandle* SUB_NH;
 		std::vector<callbackdata> sub_data;
-		ros::Subscriber sub_box_1, sub_box_2, sub_box_3;
+		ros::Subscriber sub_box_1, sub_box_2, sub_box_3, sub_box_4, sub_box_5;
 		geometry_msgs::PoseArray sample_pose_avg;
         public:
                 RetrieveData(int Navg_, ros::NodeHandle* SUB_NH_) : Navg(Navg_), SUB_NH(SUB_NH_){
                         hasdata = false;
-			sub_data.resize(3);
+			sub_data.resize(4);
 			std::cout<<"sub data size: "<<sub_data.size()<<std::endl;
-			sub_box_1 = SUB_NH->subscribe("/vrpn_client_node/box1/pose", 10, &callbackdata::sub_callback, &sub_data[0]);
-			sub_box_2 = SUB_NH->subscribe("/vrpn_client_node/box2/pose", 10, &callbackdata::sub_callback, &sub_data[1]);
-			sub_box_3 = SUB_NH->subscribe("/vrpn_client_node/box3/pose", 10, &callbackdata::sub_callback, &sub_data[2]);
+			sub_box_3 = SUB_NH->subscribe("/vrpn_client_node/greenBox_1/pose", 10, &callbackdata::sub_callback, &sub_data[0]);
+			sub_box_1 = SUB_NH->subscribe("/vrpn_client_node/pinkBox_1/pose", 10, &callbackdata::sub_callback, &sub_data[1]);
+			sub_box_2 = SUB_NH->subscribe("/vrpn_client_node/blueBox_1/pose", 10, &callbackdata::sub_callback, &sub_data[2]);
+			sub_box_4 = SUB_NH->subscribe("/vrpn_client_node/pinkBox_2/pose", 10, &callbackdata::sub_callback, &sub_data[3]);
+			//sub_box_5 = SUB_NH->subscribe("/vrpn_client_node/blueBox_2/pose", 10, &callbackdata::sub_callback, &sub_data[4]);
+			Nboxes = 4;
 		}
 
 
@@ -56,8 +59,8 @@ class RetrieveData {
 			//ros::Subscriber subscriber = SUB.subscribe("/vrpn_client_node/smallBox1/pose", 10, &callbackdata::sub_callback, &sub_data);
 
 			sample_pose_avg.poses.clear();
-			sample_pose_avg.poses.resize(3);
-			for (int i=0; i<3; ++i) {
+			sample_pose_avg.poses.resize(Nboxes);
+			for (int i=0; i<Nboxes; ++i) {
 				geometry_msgs::Pose sample_pose;
 				//sample_pose_avg.resize(7);
 				sample_pose_avg.poses[i].position.x = 0;
@@ -244,7 +247,7 @@ class PredicateGenerator {
 					locations_ind = i;
 				}
                         }
-			std::cout<<"max r: "<<max_r_arr[locations_ind]<<" for location: "<<locations_ind<<std::endl;
+			std::cout<<"max r: "<<max_r_arr[locations_ind]<<" for location: "<<locations_ind + 1<<std::endl;
 			std::cout<<"min dist: "<<min_dist<<std::endl;
                         if (min_dist < max_r_arr[locations_ind]) {
                                 ret_coord_label = locations[locations_ind].label;
@@ -292,45 +295,130 @@ int main(int argc, char **argv) {
         q_down = q_init;
         geometry_msgs::Quaternion q_down_msg, q_side_msg;
         tf2::convert(q_down, q_down_msg);
-        q_rot_side.setRPY(-M_PI/2, 0, 0);
+        q_rot_side.setRPY(M_PI/2, -M_PI/2, 0);
         q_side = q_rot_side * q_init;
         tf2::convert(q_side, q_side_msg);
         q_down.normalize();
         q_side.normalize();
 
-        std::vector<std::string> loc_labels = {"l1", "l2", "l3", "l4", "l5"};
+	/* 5 Location Arch */
+        //std::vector<std::string> loc_labels = {"l1", "l2", "l3", "l4", "l5"};
+        //geometry_msgs::Point p;
+	//p.x = 0;
+        //p.y = .35;
+        //p.z = .185;
+        //pred_gen.addLocation(p, q_side_msg, loc_labels[0], .08); // center of the arch
+
+        //p.x = .075;
+        //p.y = .4;
+        //p.z = .08;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[1], .05); // left of the arch
+
+	//p.x = -.075;
+        //p.y = .4;
+        //p.z = .08;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[2], .05); // right of the arch
+
+	//p.x = .5;
+        //p.y = -.25;
+        //p.z = .08;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[3], .15); // L4
+
+        //p.x = .5;
+        //p.y = .25;
+        //p.z = .08;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[4], .15); // L5
+
+
+
+	/* Dual Arch */
+        std::vector<std::string> loc_labels = {"l0", "l8", "l9", "l1", "l2", "l3", "l6", "l7"};
         geometry_msgs::Point p;
-                p.x = 0;
-        p.y = .35;
+	// Left Arch (robot region)
+	p.x = 0 + .45;
+        p.y = .39;
         p.z = .185;
         pred_gen.addLocation(p, q_side_msg, loc_labels[0], .08); // center of the arch
 
-        p.x = .075;
-        p.y = .4;
-        p.z = .08;
+        p.x = .075 + .45;
+        p.y = .35;
+        p.z = .085;
         pred_gen.addLocation(p, q_down_msg, loc_labels[1], .05); // left of the arch
 
-	p.x = -.075;
-        p.y = .4;
-        p.z = .08;
+	p.x = -.075 + .45;
+        p.y = .35;
+        p.z = .085;
         pred_gen.addLocation(p, q_down_msg, loc_labels[2], .05); // right of the arch
 
-	p.x = .5;
-        p.y = -.25;
-        p.z = .08;
-        pred_gen.addLocation(p, q_down_msg, loc_labels[3], .15); // L4
+	// Right Arch (human region)
+	p.x = 0 - .45;
+        p.y = .39;
+        p.z = .185;
+        pred_gen.addLocation(p, q_side_msg, loc_labels[3], .08); // center of the arch
 
-        p.x = .5;
-        p.y = .25;
-        p.z = .08;
-        pred_gen.addLocation(p, q_down_msg, loc_labels[4], .15); // L5
+        p.x = .075 - .45;
+        p.y = .35;
+        p.z = .085;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[4], .05); // left of the arch
 
-        //p.x = -.4;
-        //p.y = .3;
+	p.x = -.075 - .45;
+        p.y = .35;
+        p.z = .085;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[5], .05); // right of the arch
+
+	p.x = .50;
+        p.y = -.35;
+        p.z = .085;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[6], .15); // l6
+
+	p.x = .60;
+        p.y = -.1;
+        p.z = .085;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[7], .15); // l7
+
+
+	/* Diagonal Placement */
+        //std::vector<std::string> loc_labels = {"l0", "l1", "l2", "l3", "l4", "l5", "l6", "l7"};
+        //geometry_msgs::Point p;
+	//p.x = .50;
+        //p.y = -.35;
+        //p.z = .085;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[0], .15); // l0
+
+        //p.x = .50;
+        //p.y = 0.0;
+        //p.z = .085;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[1], .15); // l1
+
+	//p.x = .50;
+        //p.y = .35;
+        //p.z = .085;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[2], .15); // l2
+
+	//p.x = 0.0;//.20;
+        //p.y = .35;
+        //p.z = .085;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[3], .15); // l3
+
+        //p.x = -.50;
+        //p.y = -.35;
+        //p.z = .085;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[4], .15); // l4
+
+        //p.x = -.50;
+        //p.y = 0.0;
+        //p.z = .085;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[5], .15); // l5
+
+        //p.x = -.50;
+        //p.y = .35;
+        //p.z = .085;
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[6], .15); // l6
+
+	//p.x = -.20;
+        //p.y = .35;
         //p.z = .08;
-        //pred_gen.addLocation(p, q_down_msg, loc_labels[2], .15); // L2
-
-
+        //pred_gen.addLocation(p, q_down_msg, loc_labels[7], .15); // l7
 	
 	ros::ServiceClient strategy_srv_client = com_NH.serviceClient<vicon_franka_integration::Strategy>("/com_node/strategy");
 	vicon_franka_integration::Strategy strategy_srv;	
@@ -339,8 +427,10 @@ int main(int argc, char **argv) {
 
 	geometry_msgs::PoseArray* data = vicon_data.returnConfigArrPtr();
 	int j = 0;
-	std::vector<std::string> bag_labels = {"box0", "box1", "box2"};
-	std::vector<std::string> bag_domain_labels = {"domain", "domain", "domain"};
+	//std::vector<std::string> bag_labels = {"pinkBox_1", "blueBox_1", "greenBox_1", "pinkBox_2", "blueBox_2"};
+	std::vector<std::string> bag_labels = {"greenBox_1", "pinkBox_1", "blueBox_1", "pinkBox_2"};
+	//std::vector<std::string> bag_domain_labels = {"domain", "domain", "domain", "domain", "domain"};
+	std::vector<std::string> bag_domain_labels = {"domain", "domain", "domain", "domain"};
 	std::string holding_state = "";
 	geometry_msgs::Quaternion temp_orient;
 	while (ros::ok()) {

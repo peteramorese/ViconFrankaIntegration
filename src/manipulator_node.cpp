@@ -34,21 +34,27 @@ class PlanningQuerySrv {
 		std::vector<moveit_msgs::CollisionObject> col_obj_vec;
 		std::vector<std::string> obs_domain_labels;
 		franka_gripper::GraspActionGoal grip_goal;	
+		bool use_gripper;
+		std::string attached_obj;
 	public:
-		PlanningQuerySrv(moveit::planning_interface::MoveGroupInterface* move_group_ptr_, moveit::planning_interface::PlanningSceneInterface* psi_ptr_, actionlib::SimpleActionClient<franka_gripper::GraspAction>* grp_act_ptr_,  int N_TRIALS_) : 
+		PlanningQuerySrv(moveit::planning_interface::MoveGroupInterface* move_group_ptr_, moveit::planning_interface::PlanningSceneInterface* psi_ptr_, actionlib::SimpleActionClient<franka_gripper::GraspAction>* grp_act_ptr_,  int N_TRIALS_, bool use_gripper_) : 
 			move_group_ptr(move_group_ptr_),
 			planning_scene_interface_ptr(psi_ptr_),
 			grp_act_ptr(grp_act_ptr_),
-			N_TRIALS(N_TRIALS_) {
-				ROS_INFO_NAMED("manipulator_node","Waiting for franka_gripper action to show...");
-				grp_act_ptr->waitForServer();
-				ROS_INFO_NAMED("manipulator_node","Found franka_gripper action.");
+			N_TRIALS(N_TRIALS_), 
+			use_gripper(use_gripper_) {
+				attached_obj = "none";
+				if (use_gripper) {
+					ROS_INFO_NAMED("manipulator_node","Waiting for franka_gripper action to show...");
+					grp_act_ptr->waitForServer();
+					ROS_INFO_NAMED("manipulator_node","Found franka_gripper action.");
+				}
 			}
 		// DEFINE CONSTANTS FOR PROBLEM
-		const double bag_l = .07;//.045;
-		const double bag_w = .045;
+		const double bag_l = .045;//.045;
+		const double bag_w = .07;
 		const double bag_h = .157;
-		const double eef_offset = .085;
+		const double eef_offset = .075;
 		const double grip_width_closed = .044;
 		const double grip_width_open = .1;
 		const double grip_speed = .1;
@@ -147,14 +153,17 @@ class PlanningQuerySrv {
 				// Change the domain of the attached object to be 'none' 
 				// so that it does not get removed
 				findObjAndUpdate(obj_label, "none");
+				attached_obj = obj_label;
 				ROS_INFO_NAMED("manipulator_node","Grabbing object...");
-				grip_goal.goal.width = grip_width_closed; // Use closed width
-				grip_goal.goal.speed = grip_speed;
-				grip_goal.goal.force = grip_force;
-				grip_goal.goal.epsilon.inner = grip_epsilon_inner;
-				grip_goal.goal.epsilon.outer = grip_epsilon_outer;
-				grp_act_ptr->sendGoal(grip_goal.goal);
-				grp_act_ptr->waitForResult(ros::Duration(5.0));
+				if (use_gripper) {
+					grip_goal.goal.width = grip_width_closed; // Use closed width
+					grip_goal.goal.speed = grip_speed;
+					grip_goal.goal.force = grip_force;
+					grip_goal.goal.epsilon.inner = grip_epsilon_inner;
+					grip_goal.goal.epsilon.outer = grip_epsilon_outer;
+					grp_act_ptr->sendGoal(grip_goal.goal);
+					grp_act_ptr->waitForResult(ros::Duration(5.0));
+				}
 				ROS_INFO_NAMED("manipulator_node","Done grabbing object");
 				response.success = true;
 			} else if (request.drop_object != "none") {
@@ -164,14 +173,17 @@ class PlanningQuerySrv {
 				// If we are releasing an object, the new domain becomes
 				// whatever domain the end effector is in (the request)
 				findObjAndUpdate(obj_label, request.planning_domain);
+				attached_obj = "none";
 				ROS_INFO_NAMED("manipulator_node","Dropping object...");
-				grip_goal.goal.width = grip_width_open; // Use open width
-				grip_goal.goal.speed = grip_speed;
-				grip_goal.goal.force = grip_force;
-				grip_goal.goal.epsilon.inner = grip_epsilon_inner;
-				grip_goal.goal.epsilon.outer = grip_epsilon_outer;
-				grp_act_ptr->sendGoal(grip_goal.goal);
-				grp_act_ptr->waitForResult(ros::Duration(5.0));
+				if (use_gripper) {
+					grip_goal.goal.width = grip_width_open; // Use open width
+					grip_goal.goal.speed = grip_speed;
+					grip_goal.goal.force = grip_force;
+					grip_goal.goal.epsilon.inner = grip_epsilon_inner;
+					grip_goal.goal.epsilon.outer = grip_epsilon_outer;
+					grp_act_ptr->sendGoal(grip_goal.goal);
+					grp_act_ptr->waitForResult(ros::Duration(5.0));
+				}
 				response.success = true;
 				ROS_INFO_NAMED("manipulator_node","Done dropping object");
 			} else {
@@ -201,7 +213,7 @@ class PlanningQuerySrv {
 						q_orig[1] = 0;
 						q_orig[2] = bag_h/2 + eef_offset;
 						q_orig[3] = 0;
-						q_set.setRPY(0, M_PI, -M_PI/4);
+						q_set.setRPY(0, M_PI, -M_PI/4 + M_PI/2);
 						// Rotate the q
 						q_f[0] = q_in * q_orig * q_in.inverse(); 
 						q_rot[0] = q_in * q_set;
@@ -213,27 +225,32 @@ class PlanningQuerySrv {
 						q_rot.resize(N_grasps);
 						poses.resize(N_grasps);
 
-						q_orig[0] = bag_w/2 + eef_offset;
-						q_orig[1] = 0;
+						//q_orig[0] = 0;
+						//q_orig[1] = bag_w/2 + eef_offset;
+						//q_orig[2] = 0;
+						//q_orig[3] = 0;
+						q_orig[0] = 0;
+						q_orig[1] = -(bag_w/2 + eef_offset);
 						q_orig[2] = 0;
 						q_orig[3] = 0;
 						// 90 degrees
-						q_set.setRPY(0, M_PI, -M_PI/4);
+						q_set.setRPY(0, M_PI, -M_PI/4 + M_PI/2);
 						{
 							tf2::Quaternion q_set_2;
-							q_set_2.setRPY(0, M_PI/2, 0);
+							q_set_2.setRPY(M_PI/2, 0, 0);
 							q_set = q_set_2 * q_set;
 						}
 						q_f[0] = q_in * q_orig * q_in.inverse(); 
 						q_rot[0] = q_in * q_set;
 
 						// -90 degrees
-						q_set.setRPY(0, M_PI, -M_PI/4);
+						q_set.setRPY(0, M_PI, -M_PI/4 + M_PI/2);
 						{
 							tf2::Quaternion q_set_2;
-							q_set_2.setRPY(0, -M_PI/2, 0);
+							q_set_2.setRPY(-M_PI/2, 0, 0);
 							q_set = q_set_2 * q_set;
 						}
+						q_orig[1] = -q_orig[1]; //flip the axis
 						q_f[1] = q_in * q_orig * q_in.inverse(); 
 						q_rot[1] = q_in * q_set;
 
@@ -299,6 +316,12 @@ int main(int argc, char **argv) {
 	ros::AsyncSpinner spinner(2);
 	spinner.start();
 
+	bool sim_only;
+	M_NH.getParam("/sim_only", sim_only);
+
+
+	std::cout<<"\n\n\n\n sim only: "<<sim_only<<std::endl;
+
 	/////////////////////////////////////////////////////////////////////////
 	actionlib::SimpleActionClient<franka_gripper::GraspAction> grip_client("/franka_gripper/grasp", true);
 	franka_gripper::GraspActionGoal grip_goal;	
@@ -329,7 +352,8 @@ int main(int argc, char **argv) {
 	std::string planner_plugin_name;
 
 	//from tutorial
-
+	M_NH.getParam("planning_plugin", planner_plugin_name);
+	std::cout<<"\n\n\n\n"<<planner_plugin_name<<std::endl;
 	if (!M_NH.getParam("planning_plugin", planner_plugin_name))
 		ROS_FATAL_STREAM("Could not find planner plugin name");
 	try
@@ -360,6 +384,7 @@ int main(int argc, char **argv) {
 	}
 	/////////////////////////////////////////////////////////////////////////
 
+	move_group.setPlannerId("RRTConnectkConfigDefault");
 	ROS_INFO_NAMED("manipulator_node", "Reference frame: %s", move_group.getPlanningFrame().c_str());
 
 	std::vector<moveit_msgs::CollisionObject> colObjVec;
@@ -458,7 +483,7 @@ int main(int argc, char **argv) {
 	//planning_scene_interface.addCollisionObjects(colObjVec);
 	move_group.setEndEffectorLink("panda_link8");
 
-	PlanningQuerySrv plan_query_srv_container(&move_group, &planning_scene_interface, &grip_client, 5);
+	PlanningQuerySrv plan_query_srv_container(&move_group, &planning_scene_interface, &grip_client, 5, !sim_only);
 	plan_query_srv_container.setWorkspace(colObjVec, colObjVec_domain_lbls);
 
 	ros::ServiceServer plan_query_service = M_NH.advertiseService("/planning_query", &PlanningQuerySrv::planQuery_serviceCB, &plan_query_srv_container);
