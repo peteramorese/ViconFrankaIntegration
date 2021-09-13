@@ -295,7 +295,7 @@ int main(int argc, char **argv) {
         q_down = q_init;
         geometry_msgs::Quaternion q_down_msg, q_side_msg;
         tf2::convert(q_down, q_down_msg);
-        q_rot_side.setRPY(M_PI/2, -M_PI/2, 0);
+        q_rot_side.setRPY(-M_PI, -M_PI/2, 0);
         q_side = q_rot_side * q_init;
         tf2::convert(q_side, q_side_msg);
         q_down.normalize();
@@ -332,12 +332,12 @@ int main(int argc, char **argv) {
 
 
 	/* Dual Arch */
-        std::vector<std::string> loc_labels = {"l0", "l8", "l9", "l1", "l2", "l3", "l6", "l7"};
+        std::vector<std::string> loc_labels = {"l0", "l8", "l9", "l1", "l2", "l3", "l4", "l6", "l7"};
         geometry_msgs::Point p;
 	// Left Arch (robot region)
 	p.x = 0 + .45;
-        p.y = .39;
-        p.z = .185;
+        p.y = .35;
+        p.z = .185 - .002;
         pred_gen.addLocation(p, q_side_msg, loc_labels[0], .08); // center of the arch
 
         p.x = .075 + .45;
@@ -352,8 +352,8 @@ int main(int argc, char **argv) {
 
 	// Right Arch (human region)
 	p.x = 0 - .45;
-        p.y = .39;
-        p.z = .185;
+        p.y = .35;
+        p.z = .185 + .002;
         pred_gen.addLocation(p, q_side_msg, loc_labels[3], .08); // center of the arch
 
         p.x = .075 - .45;
@@ -366,15 +366,20 @@ int main(int argc, char **argv) {
         p.z = .085;
         pred_gen.addLocation(p, q_down_msg, loc_labels[5], .05); // right of the arch
 
+	p.x = -.075 - .45;
+        p.y = 0;
+        p.z = .085;
+        pred_gen.addLocation(p, q_down_msg, loc_labels[6], .15); // l4
+
 	p.x = .50;
         p.y = -.35;
         p.z = .085;
-        pred_gen.addLocation(p, q_down_msg, loc_labels[6], .15); // l6
+        pred_gen.addLocation(p, q_down_msg, loc_labels[7], .15); // l6
 
 	p.x = .60;
         p.y = -.1;
         p.z = .085;
-        pred_gen.addLocation(p, q_down_msg, loc_labels[7], .15); // l7
+        pred_gen.addLocation(p, q_down_msg, loc_labels[8], .15); // l7
 
 
 	/* Diagonal Placement */
@@ -460,7 +465,6 @@ int main(int argc, char **argv) {
 
 			if (action == "transit") {
 				plan_query_srv.request.manipulator_pose = data->poses[obj_ind];
-				//temp_orient = plan_query_srv.request.manipulator_pose.orientation;
 				std::cout<<"size: "<<data->poses.size()<<std::endl;
 				for (int ii=0; ii<data->poses.size(); ii++) {
 					std::cout<<"data stuff for box"<<ii<<": "<<data->poses[1].position.x<<std::endl;
@@ -476,12 +480,6 @@ int main(int argc, char **argv) {
 				plan_query_srv.request.safe_config = false;
 			} else if (action == "transit_side") {
 				plan_query_srv.request.manipulator_pose = data->poses[obj_ind];
-				//temp_orient = plan_query_srv.request.manipulator_pose.orientation;
-
-				//std::cout<<"size: "<<data->poses.size()<<std::endl;
-				//for (int ii=0; ii<data->poses.size(); ii++) {
-				//	std::cout<<"data stuff for box"<<ii<<": "<<data->poses[1].position.x<<std::endl;
-				//}
 				plan_query_srv.request.bag_poses = *data;
 				plan_query_srv.request.setup_environment = true;
 				plan_query_srv.request.bag_labels = bag_labels;
@@ -493,15 +491,15 @@ int main(int argc, char **argv) {
 				plan_query_srv.request.safe_config = false;
 			} else if (action == "transfer") {
 				plan_query_srv.request.manipulator_pose = pred_gen.getLocation(to_loc);
-				//plan_query_srv.request.manipulator_pose.position = pred_gen.getLocation(to_loc);
-				//plan_query_srv.request.manipulator_pose.orientation = temp_orient;
-				//temp_orient = plan_query_srv.request.manipulator_pose.orientation;
 				plan_query_srv.request.bag_poses = *data;
 				plan_query_srv.request.setup_environment = true;
 				plan_query_srv.request.bag_labels = bag_labels;
 				plan_query_srv.request.bag_domain_labels = bag_domain_labels;
 				plan_query_srv.request.pickup_object = "none";
-				plan_query_srv.request.grasp_type = "up";
+				// Setting the grasp type as "mode" uses the grasp type specified
+				// in the last 'trasit' aciton, or the current grasp
+				// mode of the system
+				plan_query_srv.request.grasp_type = "mode";
 				plan_query_srv.request.drop_object = "none";
 				plan_query_srv.request.planning_domain = "domain";
 				plan_query_srv.request.safe_config = false;

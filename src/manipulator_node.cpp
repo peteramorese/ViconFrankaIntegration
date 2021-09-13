@@ -25,6 +25,7 @@
 #include "franka_gripper/GraspAction.h"
 #include "franka_gripper/GraspActionGoal.h"
 
+static const std::string NONE = "none";
 
 class PlanningQuerySrv {
 	private:
@@ -36,6 +37,13 @@ class PlanningQuerySrv {
 		franka_gripper::GraspActionGoal grip_goal;	
 		bool use_gripper;
 		std::string attached_obj;
+		//struct grasp_mode {
+		//	std::string mode;
+		//	tf2::Quaternion rotation;
+		//};
+		//std::vector<grasp_mode> grasp_modes;
+		//int current_mode;
+		std::string current_grasp_mode;
 	public:
 		PlanningQuerySrv(moveit::planning_interface::MoveGroupInterface* move_group_ptr_, moveit::planning_interface::PlanningSceneInterface* psi_ptr_, actionlib::SimpleActionClient<franka_gripper::GraspAction>* grp_act_ptr_,  int N_TRIALS_, bool use_gripper_) : 
 			move_group_ptr(move_group_ptr_),
@@ -43,7 +51,9 @@ class PlanningQuerySrv {
 			grp_act_ptr(grp_act_ptr_),
 			N_TRIALS(N_TRIALS_), 
 			use_gripper(use_gripper_) {
-				attached_obj = "none";
+				attached_obj = NONE;
+				current_grasp_mode = NONE;
+				//grasp_modes.clear();
 				if (use_gripper) {
 					ROS_INFO_NAMED("manipulator_node","Waiting for franka_gripper action to show...");
 					grp_act_ptr->waitForServer();
@@ -68,6 +78,16 @@ class PlanningQuerySrv {
 			col_obj_vec = col_obj_vec_ws;
 			obs_domain_labels = col_obj_vec_dom_lbls;
 		}
+		//void addMode(std::string mode_, tf2::Quaternion rotation_) {
+		//	if (mode_ != NONE) {
+		//		grasp_mode temp_mode;
+		//		temp_mode.rotation = rotation_;
+		//		temp_mode.mode = mode_; 
+		//		grasp_modes.push_back(temp_mode);
+		//	} else {
+		//		ROS_ERROR_NAMED("manipulator_node", "Cannot set 'mode' to 'none'");
+		//	}
+		//}
 		void setupEnvironment(std::string planning_domain_lbl) {
 			std::cout<<"recieved planning domain label in setupEnvironment: "<<planning_domain_lbl<<std::endl;
 			std::cout<<"obs_domain_labels size: "<<obs_domain_labels.size()<<std::endl;
@@ -83,13 +103,9 @@ class PlanningQuerySrv {
 					std::cout<<"removing:"<< col_obj_vec[i].id<<std::endl;
 					col_obj_vec[i].operation = col_obj_vec[i].REMOVE;
 					temp_col_vec.push_back(col_obj_vec[i]);
-					std::cout<<"made it out of removing!"<<std::endl;
 				}
 			}
-			// PUT THIS BACK IN
 			planning_scene_interface_ptr->applyCollisionObjects(temp_col_vec);
-			//
-
 		}
 		void findObjAndUpdate(std::string obj_id, std::string domain_label_) {
 			bool not_found = true;
@@ -164,6 +180,14 @@ class PlanningQuerySrv {
 					grp_act_ptr->sendGoal(grip_goal.goal);
 					grp_act_ptr->waitForResult(ros::Duration(5.0));
 				}
+				// Set the grasp mode once the object has been picked up
+				//bool found = false;
+				//for (int i=0; i<grasp_modes.size(); ++i) {
+				//	if (grasp_modes[i].mode == current_grasp_mode) {
+				//		found = true;
+				//		mode = 
+				//	}
+				//}
 				ROS_INFO_NAMED("manipulator_node","Done grabbing object");
 				response.success = true;
 			} else if (request.drop_object != "none") {
@@ -201,9 +225,21 @@ class PlanningQuerySrv {
 					tf2::Quaternion q_orig, q_in, q_set;
 					std::vector<tf2::Quaternion> q_f; 
 					std::vector<tf2::Quaternion> q_rot;
+					// This quaternion sets the panda gripper to face down towards the 
+					// object grabbing along its length
+					q_set.setRPY(0, M_PI, -M_PI/4 + M_PI/2);
 					tf2::convert(request.manipulator_pose.orientation, q_in);
-					if (request.grasp_type == "up") {
-						std::cout<<" Grasp Type: up"<<std::endl;
+					std::string grasp_type = request.grasp_type;
+					std::cout<<" Grasp Type: "<<grasp_type<<std::endl;
+					if (grasp_type == "mode") {
+						std::cout<<"Using current grasp mode."<<std::endl;
+						grasp_type = current_grasp_mode;
+					} else {
+						// If the user does not use the current mode grasp, then
+						// keep track of the specified grasp type to set the mode
+						current_grasp_mode = grasp_type;
+					}
+					if (grasp_type == "up") {
 						int N_grasps = 1;
 						q_f.resize(N_grasps);
 						q_rot.resize(N_grasps);
@@ -213,13 +249,11 @@ class PlanningQuerySrv {
 						q_orig[1] = 0;
 						q_orig[2] = bag_h/2 + eef_offset;
 						q_orig[3] = 0;
-						q_set.setRPY(0, M_PI, -M_PI/4 + M_PI/2);
 						// Rotate the q
 						q_f[0] = q_in * q_orig * q_in.inverse(); 
 						q_rot[0] = q_in * q_set;
 
-					} else if (request.grasp_type == "side") {
-						std::cout<<" Grasp Type: side"<<std::endl;
+					} else if (grasp_type == "side") {
 						int N_grasps = 2;
 						q_f.resize(N_grasps);
 						q_rot.resize(N_grasps);
@@ -234,26 +268,27 @@ class PlanningQuerySrv {
 						q_orig[2] = 0;
 						q_orig[3] = 0;
 						// 90 degrees
-						q_set.setRPY(0, M_PI, -M_PI/4 + M_PI/2);
+						tf2::Quaternion q_set_2;
 						{
-							tf2::Quaternion q_set_2;
-							q_set_2.setRPY(M_PI/2, 0, 0);
-							q_set = q_set_2 * q_set;
+							tf2::Quaternion q_set_temp;
+							q_set_temp.setRPY(M_PI/2, 0, 0);
+							q_set_2 = q_set_temp * q_set;
 						}
 						q_f[0] = q_in * q_orig * q_in.inverse(); 
-						q_rot[0] = q_in * q_set;
+						q_rot[0] = q_in * q_set_2;
 
 						// -90 degrees
-						q_set.setRPY(0, M_PI, -M_PI/4 + M_PI/2);
 						{
-							tf2::Quaternion q_set_2;
-							q_set_2.setRPY(-M_PI/2, 0, 0);
-							q_set = q_set_2 * q_set;
+							tf2::Quaternion q_set_temp;
+							q_set_temp.setRPY(-M_PI/2, 0, 0);
+							q_set_2 = q_set_temp * q_set;
 						}
 						q_orig[1] = -q_orig[1]; //flip the axis
 						q_f[1] = q_in * q_orig * q_in.inverse(); 
-						q_rot[1] = q_in * q_set;
+						q_rot[1] = q_in * q_set_2;
 
+					} else if (grasp_type == NONE) {
+						ROS_ERROR_NAMED("manipulator_node","Sent transfer action before sending transit action. Cannot resolve grasp type");
 					} else {
 						ROS_ERROR_NAMED("manipulator_node","Unrecognized grasp type");
 					}
@@ -317,7 +352,7 @@ int main(int argc, char **argv) {
 	spinner.start();
 
 	bool sim_only;
-	M_NH.getParam("/sim_only", sim_only);
+	M_NH.getParam("sim_only", sim_only);
 
 
 	std::cout<<"\n\n\n\n sim only: "<<sim_only<<std::endl;
