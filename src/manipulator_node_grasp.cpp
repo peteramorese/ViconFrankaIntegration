@@ -16,6 +16,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit/trajectory_processing/iterative_time_parameterization.h>
 #include <moveit_msgs/DisplayRobotState.h>
 #include <moveit_msgs/DisplayTrajectory.h>
 #include <moveit_msgs/AttachedCollisionObject.h>
@@ -26,6 +27,7 @@
 #include "franka_gripper/GraspActionGoal.h"
 
 static const std::string NONE = "none";
+static const std::string PLANNING_GROUP = "panda_arm";
 
 class PlanningQuerySrv {
 	private:
@@ -44,6 +46,7 @@ class PlanningQuerySrv {
 		//std::vector<grasp_mode> grasp_modes;
 		//int current_mode;
 		std::string current_grasp_mode;
+		geometry_msgs::Pose prev_pose;
 	public:
 		PlanningQuerySrv(moveit::planning_interface::MoveGroupInterface* move_group_ptr_, moveit::planning_interface::PlanningSceneInterface* psi_ptr_, actionlib::SimpleActionClient<franka_gripper::GraspAction>* grp_act_ptr_,  int N_TRIALS_, bool use_gripper_) : 
 			move_group_ptr(move_group_ptr_),
@@ -71,6 +74,10 @@ class PlanningQuerySrv {
 		const double grip_force = 50;
 		const double grip_epsilon_inner = .03;
 		const double grip_epsilon_outer = .03;
+		const double approach_dist = .10;
+		const double jump_thresh = 0.0;
+		const double eef_step = 0.01;
+		const int num_waypts = 2;
 		const int N_TRIALS;
 		void setWorkspace(std::vector<moveit_msgs::CollisionObject> col_obj_vec_ws, std::vector<std::string> col_obj_vec_dom_lbls) {
 			col_obj_vec.clear();		
@@ -128,6 +135,9 @@ class PlanningQuerySrv {
 			std::cout<<"\n";
 			ROS_INFO_NAMED("manipulator_node", "Recieved Planning Query");
 
+			trajectory_processing::IterativeParabolicTimeParameterization IPTP;
+			robot_trajectory::RobotTrajectory r_trajectory(move_group_ptr->getRobotModel(), PLANNING_GROUP);
+
 			if (request.setup_environment) {
 				//col_obj_vec.resize(request.bag_poses.poses.size());
 				//bag_domain_labels = request.bag_domain_labels;
@@ -162,8 +172,31 @@ class PlanningQuerySrv {
 				setupEnvironment(request.planning_domain);
 			}
 
+
 			if (request.pickup_object != "none") {
-				std::cout<<"attaching obj"<<std::endl;
+				ROS_INFO_NAMED("manipulator_node","Working on grasp...");
+				//geometry_msgs::PoseStamped = getCurrentPose();
+				//move_group_ptr->setMaxVelocityScalingFactor(.002);
+				std::vector<geometry_msgs::Pose> waypts(num_waypts);
+				waypts[0] = move_group_ptr->getCurrentPose().pose;
+				waypts[num_waypts-1] = move_group_ptr->getCurrentPose().pose;
+				for (int i=1; i<num_waypts; ++i) {
+					waypts[i] = prev_pose;
+					waypts[i].position.z = waypts[i].position.z + approach_dist/num_waypts*(num_waypts - 1 - i);
+				}
+				moveit_msgs::RobotTrajectory trajectory;
+				double fraction = move_group_ptr->computeCartesianPath(waypts, eef_step, jump_thresh, trajectory);
+				//std::vector<double> time_diff;
+				//for (int i=0; i<num_waypts; ++i) {
+				//	time_diff[i] = 1.0;
+				//}
+				//const double v_scaling = .02;
+				r_trajectory.setRobotTrajectoryMsg(*(move_group_ptr->getCurrentState()), trajectory);
+				IPTP.computeTimeStamps(r_trajectory, .02, .02); 
+				moveit_msgs::RobotTrajectory r_trajectory_msg;
+				r_trajectory.getRobotTrajectoryMsg(r_trajectory_msg);
+				move_group_ptr->execute(r_trajectory_msg);
+
 				std::string obj_label = request.pickup_object;
 				move_group_ptr->attachObject(obj_label,"panda_link8");
 				// Change the domain of the attached object to be 'none' 
@@ -180,6 +213,24 @@ class PlanningQuerySrv {
 					grp_act_ptr->sendGoal(grip_goal.goal);
 					grp_act_ptr->waitForResult(ros::Duration(5.0));
 				}
+
+
+				std::vector<geometry_msgs::Pose> waypts_rev(num_waypts);
+				waypts_rev[0] = move_group_ptr->getCurrentPose().pose;
+				for (int i=1; i<num_waypts; ++i) {
+					waypts_rev[i] = waypts[num_waypts-1-i];
+					//waypts_rev[i] = prev_pose;
+					//waypts_rev[i].position.z = waypts[i].position.z + approach_dist/num_waypts*(i+1);
+				}
+				fraction = move_group_ptr->computeCartesianPath(waypts_rev, eef_step, jump_thresh, trajectory, false);
+				r_trajectory.setRobotTrajectoryMsg(*(move_group_ptr->getCurrentState()), trajectory);
+				IPTP.computeTimeStamps(r_trajectory, .02, .02); 
+				r_trajectory.getRobotTrajectoryMsg(r_trajectory_msg);
+				move_group_ptr->execute(r_trajectory_msg);
+
+				//move_group_ptr->setMaxVelocityScalingFactor(1);
+
+
 				// Set the grasp mode once the object has been picked up
 				//bool found = false;
 				//for (int i=0; i<grasp_modes.size(); ++i) {
@@ -191,7 +242,21 @@ class PlanningQuerySrv {
 				ROS_INFO_NAMED("manipulator_node","Done grabbing object");
 				response.success = true;
 			} else if (request.drop_object != "none") {
-				std::cout<<"done droppin obj"<<std::endl;
+				//move_group_ptr->setMaxVelocityScalingFactor(.02);
+				std::vector<geometry_msgs::Pose> waypts(num_waypts);
+				waypts[0] = move_group_ptr->getCurrentPose().pose;
+				for (int i=1; i<num_waypts; ++i) {
+					waypts[i] = prev_pose;
+					waypts[i].position.z = waypts[i].position.z + approach_dist/num_waypts*(num_waypts - 1 - i);
+				}
+				moveit_msgs::RobotTrajectory trajectory;
+				double fraction = move_group_ptr->computeCartesianPath(waypts, eef_step, jump_thresh, trajectory);
+				r_trajectory.setRobotTrajectoryMsg(*(move_group_ptr->getCurrentState()), trajectory);
+				IPTP.computeTimeStamps(r_trajectory, .02, .02); 
+				moveit_msgs::RobotTrajectory r_trajectory_msg;
+				r_trajectory.getRobotTrajectoryMsg(r_trajectory_msg);
+				move_group_ptr->execute(r_trajectory_msg);
+
 				std::string obj_label = request.drop_object;
 				move_group_ptr->detachObject(obj_label);
 				// If we are releasing an object, the new domain becomes
@@ -208,6 +273,19 @@ class PlanningQuerySrv {
 					grp_act_ptr->sendGoal(grip_goal.goal);
 					grp_act_ptr->waitForResult(ros::Duration(5.0));
 				}
+				std::vector<geometry_msgs::Pose> waypts_rev(num_waypts);
+				waypts_rev[0] = move_group_ptr->getCurrentPose().pose;
+				for (int i=1; i<num_waypts; ++i) {
+					waypts_rev[i] = waypts[num_waypts-1-i];
+				}
+				fraction = move_group_ptr->computeCartesianPath(waypts_rev, eef_step, jump_thresh, trajectory);
+				r_trajectory.setRobotTrajectoryMsg(*(move_group_ptr->getCurrentState()), trajectory);
+				IPTP.computeTimeStamps(r_trajectory, .02, .02); 
+				r_trajectory.getRobotTrajectoryMsg(r_trajectory_msg);
+				move_group_ptr->execute(r_trajectory_msg);
+
+				//move_group_ptr->setMaxVelocityScalingFactor(1);
+
 				response.success = true;
 				ROS_INFO_NAMED("manipulator_node","Done dropping object");
 			} else {
@@ -316,6 +394,7 @@ class PlanningQuerySrv {
 				//std::cout<<"moving to qz: "<< pose.orientation.z<<std::endl;
 				//std::cout<<"moving to qw: "<< pose.orientation.w<<std::endl;
 				bool success = false;
+				bool success_ex = false;
 				for (int ii=0; ii<N_TRIALS; ii++){
 					moveit::planning_interface::MoveGroupInterface::Plan plan_;
 
@@ -326,6 +405,14 @@ class PlanningQuerySrv {
 						ros::WallDuration(1.0).sleep();
 						success = (move_group_ptr->plan(plan_)==moveit::planning_interface::MoveItErrorCode::SUCCESS);
 						if (success){
+							std::cout<<"Plan test succeeded!"<<std::endl;
+							prev_pose = poses[iii];
+							if (request.go_to_raised) {
+								geometry_msgs::Pose raised_pose = poses[iii];
+								raised_pose.position.z = raised_pose.position.z + approach_dist;
+								move_group_ptr->setPoseTarget(raised_pose);
+								success_ex = (move_group_ptr->plan(plan_)==moveit::planning_interface::MoveItErrorCode::SUCCESS);
+							}
 							ROS_INFO_NAMED("manipulator_node","Completed planning on iteration: %d",ii);
 							move_group_ptr->execute(plan_);
 							break;
@@ -343,6 +430,7 @@ class PlanningQuerySrv {
 		}
 
 };
+
 
 int main(int argc, char **argv) {
 	ros::init(argc, argv, "manipulator_node");
@@ -362,7 +450,6 @@ int main(int argc, char **argv) {
 	franka_gripper::GraspActionGoal grip_goal;	
 
 	/////////////////////////////////////////////////////////////////////////
-	static const std::string PLANNING_GROUP = "panda_arm";
 
 	moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
 

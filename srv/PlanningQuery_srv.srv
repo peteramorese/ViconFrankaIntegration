@@ -8,5 +8,6 @@ string grasp_type
 string drop_object
 string planning_domain
 bool safe_config
+bool go_to_raised
 ---
 bool success

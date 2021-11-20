@@ -69,15 +69,21 @@ include_directories(
 
 add_executable(${PROJECT_NAME}_node src/vicon_franka_integration_node.cpp)
 add_executable(manipulator_node src/manipulator_node.cpp)
+add_executable(manipulator_node_grasp src/manipulator_node_grasp.cpp)
 add_executable(com_node src/com_node.cpp)
 add_executable(planning_node src/planning_node.cpp)
+add_executable(andrew_node src/andrew_node.cpp)
 
 add_subdirectory(include)
 target_include_directories(planning_node PUBLIC include)
 link_directories(planning_node PUBLIC include)
 
+target_include_directories(andrew_node PUBLIC include)
+link_directories(andrew_node PUBLIC include)
+
 target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES})
 target_link_libraries(manipulator_node ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries(manipulator_node_grasp ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 target_link_libraries(com_node ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 target_link_libraries(planning_node 
 	${catkin_LIBRARIES} 
@@ -89,13 +95,26 @@ target_link_libraries(planning_node
 	ConditionClass
 	TransitionSystemClass
 	)
-
+target_link_libraries(andrew_node 
+	${catkin_LIBRARIES} 
+	${Boost_LIBRARIES}
+	EdgeClass
+	AstarClass
+	StateSpaceClass
+	StateClass
+	ConditionClass
+	TransitionSystemClass
+	)
 install(TARGETS ${PROJECT_NAME}_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS manipulator_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(TARGETS manipulator_node_grasp DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS com_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS planning_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(TARGETS andrew_node DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(manipulator_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(manipulator_node_grasp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(com_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(planning_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(andrew_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})

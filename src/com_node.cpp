@@ -337,17 +337,17 @@ int main(int argc, char **argv) {
 	// Left Arch (robot region)
 	p.x = 0 + .45;
         p.y = .35;
-        p.z = .185 - .002;
+        p.z = .185 + .006;
         pred_gen.addLocation(p, q_side_msg, loc_labels[0], .08); // center of the arch
 
         p.x = .075 + .45;
         p.y = .35;
-        p.z = .085;
+        p.z = .085 + .002;
         pred_gen.addLocation(p, q_down_msg, loc_labels[1], .05); // left of the arch
 
 	p.x = -.075 + .45;
         p.y = .35;
-        p.z = .085;
+        p.z = .085 + .002;
         pred_gen.addLocation(p, q_down_msg, loc_labels[2], .05); // right of the arch
 
 	// Right Arch (human region)
@@ -478,6 +478,7 @@ int main(int argc, char **argv) {
 				plan_query_srv.request.drop_object = "none";
 				plan_query_srv.request.planning_domain = "domain";
 				plan_query_srv.request.safe_config = false;
+				plan_query_srv.request.go_to_raised = true;
 			} else if (action == "transit_side") {
 				plan_query_srv.request.manipulator_pose = data->poses[obj_ind];
 				plan_query_srv.request.bag_poses = *data;
@@ -489,6 +490,7 @@ int main(int argc, char **argv) {
 				plan_query_srv.request.drop_object = "none";
 				plan_query_srv.request.planning_domain = "domain";
 				plan_query_srv.request.safe_config = false;
+				plan_query_srv.request.go_to_raised = true;
 			} else if (action == "transfer") {
 				plan_query_srv.request.manipulator_pose = pred_gen.getLocation(to_loc);
 				plan_query_srv.request.bag_poses = *data;
@@ -503,6 +505,7 @@ int main(int argc, char **argv) {
 				plan_query_srv.request.drop_object = "none";
 				plan_query_srv.request.planning_domain = "domain";
 				plan_query_srv.request.safe_config = false;
+				plan_query_srv.request.go_to_raised = true;
 
 			} else if (action == "grasp") {
 				//plan_query_srv.request.manipulator_pose = data->poses[obj_ind];
